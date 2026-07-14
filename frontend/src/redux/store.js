@@ -1,26 +1,12 @@
-// frontend/src/redux/store.js
+// frontend\src\redux\store.js
 import { configureStore } from "@reduxjs/toolkit";
-import { apiSlice } from "./api/apiSlice";
-import { roleApi } from "./features/roleApi";
-import { equipmentApi } from "./features/equipmentApi";
-// slices
-import authSlice from "./features/auth/authSlice";
+import { baseApi } from "./api/baseApi";
 
 const store = configureStore({
   reducer: {
-    [apiSlice.reducerPath]: apiSlice.reducer, // RTK Query base API
-    [roleApi.reducerPath]: roleApi.reducer, // Role API
-    [equipmentApi.reducerPath]: equipmentApi.reducer,
-    auth: authSlice, // Auth slice
+    [baseApi.reducerPath]: baseApi.reducer,
   },
-
-  middleware: (getDefaultMiddleware) =>
-    getDefaultMiddleware()
-      .concat(equipmentApi.middleware)
-      .concat(apiSlice.middleware)
-      .concat(roleApi.middleware), // اضافه کردن middleware مربوط به roleApi
-
-  devTools: process.env.NODE_ENV !== "production",
+  middleware: (gdm) => gdm().concat(baseApi.middleware),
 });
 
 export default store;

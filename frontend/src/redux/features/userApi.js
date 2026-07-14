@@ -1,120 +1,80 @@
-// frontend/redux/features/userApi.js
-import { apiSlice } from "../api/apiSlice";
+// frontend/src/redux/features/userApi.js
+import { baseApi } from "@/redux/api/baseApi";
 
-export const userApi = apiSlice.injectEndpoints({
-  overrideExisting: true,
+export const userApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
-    // =======================
-    // ✅ ایجاد کاربر
-    // =======================
-    createUser: builder.mutation({
-      query: (formData) => ({
-        url: `users/`,
-        method: "POST",
-        body: formData, // FormData شامل تصویر و بقیه فیلدها
+    // لیست کاربران با pagination, search, filter
+    listUsers: builder.query({
+      query: ({
+        page = 1,
+        limit = 10,
+        search = "",
+        role,
+        status,
+        sortBy,
+        sortOrder,
+      } = {}) => ({
+        url: "/users",
+        params: { page, limit, search, role, status, sortBy, sortOrder },
       }),
-      invalidatesTags: [{ type: "User", id: "LIST" }],
+      transformResponse: (response) => {
+        // Normalize response
+        return {
+          users: response.data?.users || response.users || [],
+          pagination: response.data?.pagination || {},
+        };
+      },
+      providesTags: ["Users"],
     }),
 
-    // =======================
-    // ✅ دریافت کاربر با employeeCode
-    // =======================
-    getUserByEmployeeCode: builder.query({
-      query: (code) => `users/employee/${code}`,
-      transformResponse: (response) => response.data || {},
-      providesTags: (result, error, code) => [{ type: "User", id: code }],
-    }),
-
-    // =======================
-    // ✅ دریافت کاربر با ID
-    // =======================
+    // دریافت کاربر با ID
     getUserById: builder.query({
-      query: (id) => `users/${id}`,
-      transformResponse: (response) => response.data || {},
-      providesTags: (result, error, id) => [{ type: "User", id }],
+      query: (id) => `/users/${id}`,
+      transformResponse: (response) => response.data || response,
+      providesTags: (result, error, id) => [{ type: "Users", id }],
     }),
 
-    // =======================
-    // ✅ آپدیت کاربر با FormData
-    // =======================
+    // دریافت کاربر با employeeCode
+    getUserByEmployeeCode: builder.query({
+      query: (code) => `/users/employee/${code}`,
+      transformResponse: (response) => response.data || response,
+    }),
+
+    // ایجاد کاربر جدید
+    createUser: builder.mutation({
+      query: (body) => ({
+        url: "/users",
+        method: "POST",
+        body,
+      }),
+      invalidatesTags: ["Users"],
+    }),
+
+    // بروزرسانی کاربر
     updateUser: builder.mutation({
       query: ({ id, formData }) => ({
-        url: `users/${id}`,
+        url: `/users/${id}`,
         method: "PUT",
-        body: formData, // body باید FormData باشه
+        body: formData,
       }),
-      invalidatesTags: (result, error, { id }) => [
-        { type: "User", id },
-        { type: "User", id: "LIST" },
-      ],
     }),
 
-    // =======================
-    // ✅ حذف کاربر
-    // =======================
+    // حذف کاربر
     deleteUser: builder.mutation({
       query: (id) => ({
-        url: `users/${id}`,
+        url: `/users/${id}`,
         method: "DELETE",
       }),
-      invalidatesTags: [{ type: "User", id: "LIST" }],
-    }),
-
-    // =======================
-    // ✅ تغییر وضعیت کاربر
-    // =======================
-    changeUserStatus: builder.mutation({
-      query: ({ id, status }) => ({
-        url: `users/${id}/status`,
-        method: "PATCH",
-        body: { status },
-      }),
-      invalidatesTags: (result, error, { id }) => [
-        { type: "User", id },
-        { type: "User", id: "LIST" },
-      ],
-    }),
-
-    // =======================
-    // ✅ لیست کاربران با فیلتر و صفحه‌بندی
-    // =======================
-    listUsers: builder.query({
-      query: ({ page = 1, limit = 10, status, role } = {}) => {
-        const params = new URLSearchParams();
-        params.append("page", page);
-        params.append("limit", limit);
-        if (status) params.append("status", status);
-        if (role) params.append("role", role);
-        return `users?${params.toString()}`;
-      },
-      transformResponse: (response) => response.users || [], // ✅ تغییر این خط
-      providesTags: (result) =>
-        Array.isArray(result)
-          ? [
-              ...result.map((user) => ({ type: "User", id: user._id })),
-              { type: "User", id: "LIST" },
-            ]
-          : [{ type: "User", id: "LIST" }],
-    }),
-
-    // =======================
-    // ✅ دریافت پروفایل کاربر لاگین‌شده
-    // =======================
-    getMe: builder.query({
-      query: () => `users/me`,
-      transformResponse: (response) => response.data || {},
-      providesTags: [{ type: "User", id: "ME" }],
+      invalidatesTags: ["Users"],
     }),
   }),
 });
 
 export const {
-  useCreateUserMutation,
-  useGetUserByEmployeeCodeQuery,
+  useListUsersQuery,
   useGetUserByIdQuery,
+  useGetUserByEmployeeCodeQuery,
+  useCreateUserMutation,
   useUpdateUserMutation,
   useDeleteUserMutation,
-  useGetMeQuery,
-  useChangeUserStatusMutation,
-  useListUsersQuery,
 } = userApi;

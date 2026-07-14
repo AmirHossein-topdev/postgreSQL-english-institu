@@ -5,7 +5,7 @@ import Link from "next/link";
 import {
   Users,
   UserCheck,
-  Dumbbell,
+  GraduationCap,
   TrendingUp,
   Activity,
   DollarSign,
@@ -13,9 +13,13 @@ import {
   BarChart3,
   Settings,
   ShieldCheck,
-  ShoppingCart,
+  BookOpen,
   ArrowUpRight,
   ClipboardList,
+  Award,
+  CalendarDays,
+  MessageSquare,
+  Library,
 } from "lucide-react";
 import {
   AreaChart,
@@ -25,125 +29,233 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  LineChart,
-  Line,
 } from "recharts";
 import DashboardLayout from "./layout";
 
-// داده‌های تحلیلی: مقایسه حضور اعضا و درآمد کل (نمودار سینوسی پیچیده)
+// داده‌های تحلیلی: مقایسه حضور زبان‌آموزان و درآمد کل
 const performanceData = [
-  { name: "شنبه", members: 400, revenue: 2400 },
-  { name: "۱شنبه", members: 300, revenue: 1398 },
-  { name: "۲شنبه", members: 900, revenue: 9800 },
-  { name: "۳شنبه", members: 1480, revenue: 3908 },
-  { name: "۴شنبه", sales: 1890, revenue: 4800 },
-  { name: "۵شنبه", members: 2390, revenue: 3800 },
-  { name: "جمعه", members: 3490, revenue: 4300 },
+  { name: "شنبه", students: 320, revenue: 3200000 },
+  { name: "یکشنبه", students: 350, revenue: 3500000 },
+  { name: "دوشنبه", students: 410, revenue: 4100000 },
+  { name: "سه‌شنبه", students: 480, revenue: 4800000 },
+  { name: "چهارشنبه", students: 520, revenue: 5200000 },
+  { name: "پنجشنبه", students: 560, revenue: 5600000 },
+  { name: "جمعه", students: 430, revenue: 4300000 },
 ];
 
-export default function GlobalGymDashboard() {
-  // کارت‌های آمار حیاتی کل مجموعه
+export default function AdminLanguageDashboard() {
+  // کارت‌های آمار حیاتی آموزشگاه
   const kpiStats = [
     {
-      label: "کل اعضای فعال",
-      val: "۱,۲۴۰",
-      sub: "+۱۲٪ این ماه",
+      label: "کل زبان‌آموزان فعال",
+      val: "۱,۲۸۰",
+      sub: "+۱۸٪ این ترم",
       icon: <Users />,
       color: "text-blue-400",
     },
     {
-      label: "مربیان VIP",
-      val: "۱۸",
-      sub: "در حال آموزش",
+      label: "مربیان مجرب",
+      val: "۲۴",
+      sub: "۱۲ دوره فعال",
       icon: <UserCheck />,
       color: "text-green-400",
     },
     {
-      label: "تجهیزات و دستگاه‌ها",
-      val: "۸۵",
-      sub: "۳ مورد نیاز به سرویس",
-      icon: <Dumbbell />,
-      color: "text-yellow-400",
+      label: "دوره‌های آموزشی",
+      val: "۳۶",
+      sub: "۴ سطح مختلف",
+      icon: <Library />,
+      color: "text-cyan-400",
     },
     {
-      label: "تراز مالی کل (سود)",
-      val: "۸۴۲.۰ M",
-      sub: "برآورد سالیانه",
+      label: "درآمد کل (شهریه)",
+      val: "۱,۸۴۲ M",
+      sub: "برآورد فصلی",
       icon: <DollarSign />,
       color: "text-purple-400",
     },
   ];
 
-  // وضعیت لحظه‌ای بخش‌های مختلف
-  const gymSections = [
+  // بخش‌های مختلف مدیریتی آموزشگاه
+  const adminSections = [
     {
       id: 1,
-      title: "مدیریت اعضا",
-      desc: "تمدید شهریه و ثبت‌نام",
+      title: "مدیریت زبان‌آموزان",
+      desc: "ثبت‌نام، تمدید و ارزیابی",
       icon: <ShieldCheck />,
-      link: "manager-dashboard/members",
+      link: "/admin-dashboard/students",
     },
     {
       id: 2,
-      title: "لیست مربیان",
-      desc: "برنامه تمرینی و درصد فروش",
+      title: "مدیریت مربیان",
+      desc: "برنامه تدریس و حقوق",
       icon: <ClipboardList />,
-      link: "manager-dashboard/trainers",
+      link: "/admin-dashboard/teachers",
     },
     {
       id: 3,
-      title: "انبار و تجهیزات",
-      desc: "خرید دستگاه و استهلاک",
-      icon: <Settings />,
-      link: "manager-dashboard/equipment",
+      title: "دوره‌ها و کلاس‌ها",
+      desc: "زمان‌بندی و ظرفیت",
+      icon: <BookOpen />,
+      link: "/admin-dashboard/courses",
     },
     {
       id: 4,
-      title: "فروشگاه مکمل",
-      desc: "مدیریت فروش محصولات",
-      icon: <ShoppingCart />,
-      link: "manager-dashboard/shop",
+      title: "ارزیابی و نمرات",
+      desc: "آزمون‌ها و پیشرفت تحصیلی",
+      icon: <Award />,
+      link: "/admin-dashboard/grades",
+    },
+  ];
+
+  // دوره‌های در حال ثبت‌نام
+  const activeCourses = [
+    {
+      name: "دوره مکالمه پیشرفته",
+      level: "C1",
+      students: 24,
+      capacity: 30,
+      teacher: "استاد رحیمی",
+    },
+    {
+      name: "دوره گرامر پایه",
+      level: "A2",
+      students: 18,
+      capacity: 25,
+      teacher: "استاد کریمی",
+    },
+    {
+      name: "دوره آیلتس",
+      level: "B2-C1",
+      students: 32,
+      capacity: 35,
+      teacher: "استاد صفوی",
+    },
+    {
+      name: "دوره کودکان",
+      level: "Starter",
+      students: 15,
+      capacity: 20,
+      teacher: "استاد حسینی",
+    },
+  ];
+
+  // آخرین فعالیت‌های سیستم
+  const recentActivities = [
+    {
+      time: "۱۰:۴۵",
+      text: "ثبت‌نام <span class='text-blue-400 font-black'>۲۴ زبان‌آموز جدید</span> در ترم تابستان",
+      color: "blue",
+    },
+    {
+      time: "۰۹:۳۰",
+      text: "ایجاد <span class='text-green-400 font-black'>۴ کلاس جدید</span> سطح متوسط",
+      color: "green",
+    },
+    {
+      time: "۰۸:۱۵",
+      text: "تمدید قرارداد <span class='text-cyan-400 font-black'>استاد محمدی</span> برای ترم آینده",
+      color: "cyan",
+    },
+    {
+      time: "۰۷:۴۵",
+      text: "برگزاری آزمون تعیین سطح برای <span class='text-purple-400 font-black'>۵۶ نفر</span>",
+      color: "purple",
     },
   ];
 
   return (
     <DashboardLayout>
       <div
-        className="p-4 sm:p-8 min-h-screen bg-[#0f1115] rounded-[2.5rem] border border-gray-800 shadow-2xl"
+        className="p-4 sm:p-8 min-h-screen bg-gradient-to-br from-[#0a1628] to-[#0d1b2a] rounded-[2.5rem]"
         dir="rtl"
       >
-        {/* Header - استایل فرماندهی فلاح */}
-        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 mb-12 pb-8 border-b border-gray-800">
+        {/* Header - استایل مدیریت آموزشگاه */}
+        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 mb-12 pb-8 border-b border-blue-500/20">
           <div>
             <h1 className="text-4xl font-black text-white italic tracking-tighter uppercase leading-none">
               داشبورد مدیریتی{" "}
-              <span className="text-yellow-400 text-5xl">IRON GYM</span>
+              <span className="text-blue-400 text-5xl">آموزشگاه زبان</span>
             </h1>
             <p className="text-gray-500 text-xs uppercase tracking-[0.5em] mt-3 flex items-center gap-2">
-              <Zap size={14} className="text-yellow-400" />
-              Full Enterprise Management System v2.0
+              <Zap size={14} className="text-blue-400" />
+              سامانه جامع مدیریت آموزشگاه v2.0
             </p>
           </div>
 
           <div className="flex items-center gap-4">
-            <div className="bg-[#1a1d23] border border-gray-700 p-2 px-4 rounded-2xl hidden md:block">
+            <div className="bg-[#1a1f2e] border border-blue-500/20 p-2 px-4 rounded-2xl hidden md:block">
               <p className="text-[10px] text-gray-500 font-bold uppercase">
                 آخرین آپدیت سیستم
               </p>
-              <p className="text-white font-mono text-sm">2025/12/31 - 23:15</p>
+              <p className="text-white font-mono text-sm">2025/01/15 - ۲۳:۱۵</p>
             </div>
-            <button className="bg-yellow-400 hover:bg-yellow-500 text-black font-black px-6 py-4 rounded-2xl flex items-center gap-2 transition-all active:scale-95 italic text-sm">
-              <Activity size={18} /> گزارش جامع نهایی
+            <button className="bg-blue-500 hover:bg-blue-600 text-white font-black px-6 py-4 rounded-2xl flex items-center gap-2 transition-all active:scale-95 italic text-sm shadow-lg shadow-blue-500/30">
+              <Activity size={18} /> گزارش جامع ترم
             </button>
           </div>
         </div>
 
-        {/* KPI Grid - آمار ۴ رکن اصلی */}
+        {/* دوره‌های فعال در حال ثبت‌نام - جابجا شده به بالا */}
+        <div className="mb-10">
+          <div className="bg-[#1a1f2e] rounded-[2.5rem] border border-blue-500/20 overflow-hidden shadow-2xl">
+            <div className="p-6 border-b border-blue-500/20 bg-blue-500/5">
+              <h3 className="text-white font-black italic flex items-center gap-2 uppercase tracking-widest text-sm">
+                <Library className="text-blue-400" size={18} /> دوره‌های فعال
+              </h3>
+            </div>
+            <div className="p-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                {activeCourses.map((course, i) => (
+                  <div
+                    key={i}
+                    className="p-4 bg-blue-500/5 rounded-2xl border border-blue-500/10 hover:border-blue-400/50 transition-all duration-300"
+                  >
+                    <div className="flex justify-between items-start mb-3">
+                      <div>
+                        <h4 className="text-white font-black text-lg">
+                          {course.name}
+                        </h4>
+                        <p className="text-blue-400 text-xs font-bold">
+                          سطح {course.level}
+                        </p>
+                      </div>
+                      <div className="text-left">
+                        <p className="text-gray-400 text-xs">مربی:</p>
+                        <p className="text-white text-sm font-bold">
+                          {course.teacher}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex justify-between items-center mt-3">
+                      <div className="flex items-center gap-2">
+                        <Users size={14} className="text-gray-500" />
+                        <span className="text-gray-300 text-sm">
+                          {course.students} / {course.capacity} نفر
+                        </span>
+                      </div>
+                      <div className="w-32 h-2 bg-gray-700 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-blue-500 rounded-full"
+                          style={{
+                            width: `${(course.students / course.capacity) * 100}%`,
+                          }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* KPI Grid - آمار ۴ رکن اصلی آموزشگاه - جابجا شده به وسط */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
           {kpiStats.map((stat, i) => (
             <div
               key={i}
-              className="bg-[#1a1d23] p-6 rounded-[2rem] border border-gray-800 relative overflow-hidden group hover:border-yellow-400/40 transition-all"
+              className="bg-[#1a1f2e] p-6 rounded-[2rem] border border-blue-500/20 relative overflow-hidden group hover:border-blue-400/60 transition-all shadow-lg"
             >
               <div className="relative z-10">
                 <p className="text-gray-500 text-[10px] uppercase font-black mb-1 tracking-widest">
@@ -166,26 +278,26 @@ export default function GlobalGymDashboard() {
           ))}
         </div>
 
-        {/* Main Analytics Section */}
+        {/* Main Analytics Section - نمودار و دسترسی سریع */}
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-8 mb-10">
           {/* نمودار پیشرفته - تحلیل حضور و درآمد */}
-          <div className="xl:col-span-2 bg-[#1a1d23] p-8 rounded-[2.5rem] border border-gray-800 shadow-inner">
+          <div className="xl:col-span-2 bg-[#1a1f2e] p-8 rounded-[2.5rem] border border-blue-500/20 shadow-inner">
             <div className="flex items-center justify-between mb-10">
               <div>
                 <h3 className="text-white text-xl font-black italic uppercase tracking-tighter flex items-center gap-2">
-                  <BarChart3 className="text-yellow-400" size={24} /> آنالیز
-                  عملکرد کل مجموعه
+                  <BarChart3 className="text-blue-400" size={24} /> آنالیز
+                  عملکرد آموزشگاه
                 </h3>
                 <p className="text-gray-500 text-[10px] mt-1">
-                  تطبیق تعداد ورزشکاران با درآمد ناخالص هفتگی
+                  تطبیق تعداد زبان‌آموزان با درآمد شهریه هفتگی
                 </p>
               </div>
               <div className="flex gap-2">
-                <span className="flex items-center gap-1 text-[10px] text-yellow-400 font-bold bg-yellow-400/10 px-3 py-1 rounded-full border border-yellow-400/20">
-                  درآمد
-                </span>
                 <span className="flex items-center gap-1 text-[10px] text-blue-400 font-bold bg-blue-400/10 px-3 py-1 rounded-full border border-blue-400/20">
-                  حضور اعضا
+                  درآمد (هزار تومان)
+                </span>
+                <span className="flex items-center gap-1 text-[10px] text-cyan-400 font-bold bg-cyan-400/10 px-3 py-1 rounded-full border border-cyan-400/20">
+                  تعداد زبان‌آموزان
                 </span>
               </div>
             </div>
@@ -194,9 +306,25 @@ export default function GlobalGymDashboard() {
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={performanceData}>
                   <defs>
-                    <linearGradient id="colorRev" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#facc15" stopOpacity={0.3} />
-                      <stop offset="95%" stopColor="#facc15" stopOpacity={0} />
+                    <linearGradient
+                      id="colorRevenue"
+                      x1="0"
+                      y1="0"
+                      x2="0"
+                      y2="1"
+                    >
+                      <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
+                      <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                    </linearGradient>
+                    <linearGradient
+                      id="colorStudents"
+                      x1="0"
+                      y1="0"
+                      x2="0"
+                      y2="1"
+                    >
+                      <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.3} />
+                      <stop offset="95%" stopColor="#06b6d4" stopOpacity={0} />
                     </linearGradient>
                   </defs>
                   <CartesianGrid
@@ -212,6 +340,16 @@ export default function GlobalGymDashboard() {
                     tickLine={false}
                   />
                   <YAxis
+                    yAxisId="left"
+                    stroke="#4b5563"
+                    fontSize={12}
+                    axisLine={false}
+                    tickLine={false}
+                    tickFormatter={(value) => `${value / 1000000}M`}
+                  />
+                  <YAxis
+                    yAxisId="right"
+                    orientation="right"
                     stroke="#4b5563"
                     fontSize={12}
                     axisLine={false}
@@ -219,53 +357,91 @@ export default function GlobalGymDashboard() {
                   />
                   <Tooltip
                     contentStyle={{
-                      backgroundColor: "#0f1115",
-                      border: "1px solid #374151",
+                      backgroundColor: "#0f1420",
+                      border: "1px solid #3b82f6",
                       borderRadius: "15px",
                       textAlign: "right",
                     }}
                   />
                   <Area
+                    yAxisId="left"
                     type="monotone"
                     dataKey="revenue"
-                    stroke="#facc15"
-                    strokeWidth={4}
+                    stroke="#3b82f6"
+                    strokeWidth={3}
                     fillOpacity={1}
-                    fill="url(#colorRev)"
+                    fill="url(#colorRevenue)"
                   />
                   <Area
+                    yAxisId="right"
                     type="monotone"
-                    dataKey="members"
-                    stroke="#3b82f6"
-                    strokeWidth={2}
-                    fill="transparent"
+                    dataKey="students"
+                    stroke="#06b6d4"
+                    strokeWidth={3}
+                    fillOpacity={1}
+                    fill="url(#colorStudents)"
                   />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
           </div>
 
-          {/* Quick Access Menu - دسترسی سریع بخش‌ها */}
-          <div className="space-y-4">
-            <h3 className="text-white font-black italic uppercase tracking-widest text-sm mb-6 flex items-center gap-2">
-              <Settings className="text-yellow-400" size={18} /> دسترسی به
-              واحدها
-            </h3>
-            {gymSections.map((section) => (
+          {/* آخرین فعالیت‌های سیستم - جابجا شده به کنار نمودار */}
+          <div className="bg-[#1a1f2e] rounded-[2.5rem] border border-blue-500/20 overflow-hidden shadow-2xl">
+            <div className="p-6 border-b border-blue-500/20 bg-blue-500/5">
+              <h3 className="text-white font-black italic flex items-center gap-2 uppercase tracking-widest text-sm">
+                <Activity className="text-blue-400" size={18} /> آخرین فعالیت‌ها
+              </h3>
+            </div>
+            <div className="p-6">
+              <div className="space-y-4">
+                {recentActivities.map((activity, i) => {
+                  const colorClasses = {
+                    blue: "border-blue-400 text-blue-400",
+                    green: "border-green-400 text-green-400",
+                    cyan: "border-cyan-400 text-cyan-400",
+                    purple: "border-purple-400 text-purple-400",
+                  };
+                  return (
+                    <div
+                      key={i}
+                      className={`flex items-center gap-4 text-xs p-3 bg-blue-500/5 rounded-2xl border-r-4 ${colorClasses[activity.color].split(" ")[0]} text-gray-400`}
+                    >
+                      <span
+                        className={`shrink-0 font-black ${colorClasses[activity.color].split(" ")[1]}`}
+                      >
+                        {activity.time}
+                      </span>
+                      <p dangerouslySetInnerHTML={{ __html: activity.text }} />
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Quick Access Menu - دسترسی سریع بخش‌ها - جابجا شده به پایین */}
+        <div className="mb-10">
+          <h3 className="text-white font-black italic uppercase tracking-widest text-sm mb-6 flex items-center gap-2">
+            <Settings className="text-blue-400" size={18} /> دسترسی سریع
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+            {adminSections.map((section) => (
               <Link
                 key={section.id}
                 href={section.link}
-                className="block p-5 bg-[#1a1d23] border border-gray-800 rounded-3xl hover:bg-yellow-400 group transition-all duration-300"
+                className="block p-5 bg-[#1a1f2e] border border-blue-500/20 rounded-3xl hover:bg-blue-500 group transition-all duration-300"
               >
                 <div className="flex items-center gap-5">
-                  <div className="p-4 bg-gray-900 rounded-2xl text-yellow-400 group-hover:bg-black group-hover:text-yellow-400 transition-colors">
+                  <div className="p-4 bg-blue-500/10 rounded-2xl text-blue-400 group-hover:bg-white group-hover:text-blue-600 transition-colors">
                     {section.icon}
                   </div>
                   <div>
-                    <h4 className="text-white group-hover:text-black font-black text-lg italic uppercase tracking-tighter leading-none">
+                    <h4 className="text-white group-hover:text-white font-black text-lg italic uppercase tracking-tighter leading-none">
                       {section.title}
                     </h4>
-                    <p className="text-gray-500 group-hover:text-black/70 text-xs mt-1 font-bold">
+                    <p className="text-gray-500 group-hover:text-white/80 text-xs mt-1 font-bold">
                       {section.desc}
                     </p>
                   </div>
@@ -275,97 +451,13 @@ export default function GlobalGymDashboard() {
           </div>
         </div>
 
-        {/* Bottom Section: Equipment Status & Recent Logs */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* وضعیت سلامت دستگاه‌ها */}
-          <div className="bg-[#1a1d23] rounded-[2.5rem] border border-gray-800 overflow-hidden shadow-2xl">
-            <div className="p-6 border-b border-gray-800 bg-gray-800/30">
-              <h3 className="text-white font-black italic flex items-center gap-2 uppercase tracking-widest text-sm">
-                <Dumbbell className="text-yellow-400" size={18} /> مانیتورینگ
-                سلامت تجهیزات
-              </h3>
-            </div>
-            <div className="p-6 space-y-6">
-              {[
-                {
-                  name: "لاین دمبل‌های حرفه‌ای",
-                  status: 100,
-                  color: "bg-green-400",
-                },
-                {
-                  name: "تردمیل‌های سری X7",
-                  status: 65,
-                  color: "bg-yellow-400",
-                },
-                {
-                  name: "دستگاه‌های بدنسازی هاگ",
-                  status: 90,
-                  color: "bg-green-400",
-                },
-                { name: "سیستم صوتی و تهویه", status: 40, color: "bg-red-500" },
-              ].map((item, i) => (
-                <div key={i}>
-                  <div className="flex justify-between mb-2">
-                    <span className="text-gray-300 text-xs font-bold italic uppercase tracking-tighter">
-                      {item.name}
-                    </span>
-                    <span className="text-white text-xs font-black">
-                      {item.status}%
-                    </span>
-                  </div>
-                  <div className="h-2 w-full bg-gray-900 rounded-full overflow-hidden">
-                    <div
-                      className={`h-full ${item.color} shadow-[0_0_10px_rgba(250,204,21,0.2)]`}
-                      style={{ width: `${item.status}%` }}
-                    ></div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* آخرین فعالیت‌های مدیریتی */}
-          <div className="bg-[#1a1d23] rounded-[2.5rem] border border-gray-800 overflow-hidden shadow-2xl">
-            <div className="p-6 border-b border-gray-800 bg-gray-800/30">
-              <h3 className="text-white font-black italic flex items-center gap-2 uppercase tracking-widest text-sm">
-                <Activity className="text-yellow-400" size={18} /> لاگ
-                فعالیت‌های اخیر سیستم
-              </h3>
-            </div>
-            <div className="p-6">
-              <div className="space-y-4 font-bold">
-                <div className="flex items-center gap-4 text-xs p-3 bg-gray-900/50 rounded-2xl border-r-4 border-yellow-400 text-gray-400">
-                  <span className="text-yellow-400 shrink-0">۱۰:۴۵</span>
-                  <p>
-                    خرید{" "}
-                    <span className="text-white font-black italic uppercase">
-                      ۳ دستگاه پرس پا
-                    </span>{" "}
-                    جدید توسط مدیریت ثبت شد.
-                  </p>
-                </div>
-                <div className="flex items-center gap-4 text-xs p-3 bg-gray-900/50 rounded-2xl border-r-4 border-blue-400 text-gray-400">
-                  <span className="text-blue-400 shrink-0">۰۹:۳۰</span>
-                  <p>
-                    <span className="text-white font-black italic uppercase italic">
-                      ۴۵ نفر
-                    </span>{" "}
-                    عضو جدید در شعبه مرکزی ثبت‌نام کردند.
-                  </p>
-                </div>
-                <div className="flex items-center gap-4 text-xs p-3 bg-gray-900/50 rounded-2xl border-r-4 border-red-500 text-gray-400">
-                  <span className="text-red-500 shrink-0">۰۸:۱۵</span>
-                  <p>
-                    اخطار:{" "}
-                    <span className="text-white font-black italic uppercase">
-                      سیستم تهویه
-                    </span>{" "}
-                    سالن ۲ نیاز به بررسی فنی دارد.
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
+        {/* پیام ویژه مدیر */}
+        <div className="p-6 bg-gradient-to-r from-blue-500/10 to-cyan-500/10 rounded-[2rem] border border-blue-500/20 text-center">
+          <p className="text-gray-300 text-sm flex items-center justify-center gap-2">
+            <MessageSquare size={16} className="text-blue-400" />
+            ترم جدید از ۱۵ بهمن ماه آغاز می‌شود. ثبت‌نام تا ۱۰ بهمن ادامه دارد.
+            <CalendarDays size={14} className="text-cyan-400 mr-2" />
+          </p>
         </div>
       </div>
     </DashboardLayout>

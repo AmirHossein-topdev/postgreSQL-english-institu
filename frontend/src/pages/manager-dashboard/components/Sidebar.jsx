@@ -6,16 +6,20 @@ import {
   LayoutDashboard,
   Users,
   UserRound,
-  Dumbbell,
-  Coffee,
+  GraduationCap,
+  BookOpen,
   CalendarDays,
   CreditCard,
   Settings,
   ChevronDown,
   ChevronUp,
   X,
-  Zap,
-} from "lucide-react"; // استفاده از لوسید آیکون
+  Library,
+  ClipboardList,
+  Trophy,
+  MessageSquare,
+  UserCircle,
+} from "lucide-react";
 
 const menuItems = [
   {
@@ -24,32 +28,34 @@ const menuItems = [
     href: "/manager-dashboard",
   },
   {
-    label: "مدیریت اعضا",
+    label: "مدیریت مدیران",
+    icon: <UserCircle size={20} />,
+    href: "/manager-dashboard/admins",
+  },
+  {
+    label: "مدیریت زبان‌آموزان",
     icon: <Users size={20} />,
-    href: "/manager-dashboard/users",
+    href: "/manager-dashboard/students",
   },
   {
-    label: "مربیان و پرسنل",
+    label: "مدیریت مربیان",
     icon: <UserRound size={20} />,
-    href: "/manager-dashboard/trainers",
+    href: "/manager-dashboard/teachers",
   },
+
   {
-    label: "حضور و غیاب",
+    label: "کلاس‌ها و ترم‌ها",
+    icon: <Library size={20} />,
+    href: "/manager-dashboard/class",
+  },
+
+  {
+    label: " کتاب ",
     icon: <CalendarDays size={20} />,
-    href: "/manager-dashboard/presence",
+    href: "/manager-dashboard/book",
   },
   {
-    label: "بوفه و رستوران",
-    icon: <Coffee size={20} />,
-    href: "/manager-dashboard/cafe-menu",
-  },
-  {
-    label: "تجهیزات باشگاه",
-    icon: <Dumbbell size={20} />,
-    href: "/manager-dashboard/equipment",
-  },
-  {
-    label: "امور مالی",
+    label: "امور مالی و شهریه",
     icon: <CreditCard size={20} />,
     href: "/manager-dashboard/finance",
   },
@@ -81,7 +87,7 @@ function MenuItem({ item, pathname, onClose, level = 0 }) {
         <div
           className={`flex items-center justify-between rounded-xl p-3 mb-1 transition-all duration-200 cursor-pointer ${
             isActive
-              ? "bg-yellow-400/10 text-yellow-400"
+              ? "bg-blue-500/10 text-blue-400"
               : "text-gray-400 hover:bg-gray-800/50 hover:text-white"
           }`}
           style={{ paddingRight }}
@@ -121,7 +127,7 @@ function MenuItem({ item, pathname, onClose, level = 0 }) {
         href={item.href}
         className={`flex items-center gap-3 rounded-xl p-3 mb-1 transition-all duration-200 ${
           isActive
-            ? "bg-yellow-400 text-black font-bold shadow-[0_0_15px_rgba(250,204,21,0.3)]"
+            ? "bg-blue-500 text-white font-bold shadow-[0_0_15px_rgba(59,130,246,0.3)]"
             : "text-gray-400 hover:bg-gray-800/50 hover:text-white"
         }`}
         style={{ paddingRight }}
@@ -150,7 +156,6 @@ export default function Sidebar({ isMobileOpen, onClose }) {
           mainContent.classList.toggle("lg:mr-20");
           mainContent.classList.toggle("lg:mr-64");
         }
-        // پنهان کردن متن‌ها در حالت جمع شده
         const texts = document.querySelectorAll(".sidebar-text");
         texts.forEach((t) => t.classList.toggle("hidden"));
       }
@@ -161,21 +166,22 @@ export default function Sidebar({ isMobileOpen, onClose }) {
   }, []);
 
   let roleTitle = "کاربر";
-  if (pathname.includes("trainers-dashboard")) {
-    roleTitle = "مربی";
+  if (pathname.includes("teacher-dashboard")) {
+    roleTitle = "مربی زبان";
   } else if (pathname.includes("manager-dashboard")) {
-    if (pathname.includes("users-dashboard")) {
-      roleTitle = "کاربر";
-    } else if (pathname.includes("cafe-dashboard")) {
-      roleTitle = "مدیر کافه";
+    if (pathname.includes("student-dashboard")) {
+      roleTitle = "زبان‌آموز";
     } else {
-      roleTitle = "مدیر سیستم";
+      roleTitle = "مدیر آموزشگاه";
     }
+  } else if (pathname.includes("student-dashboard")) {
+    roleTitle = "زبان‌آموز";
   }
+
   return (
     <div
       id="sidebar"
-      className={`fixed top-0 right-0 h-full w-56 z-[60] bg-[#0f1115] border-l border-gray-800 text-white flex flex-col transition-all duration-300 transform ${
+      className={`fixed top-0 right-0 h-full w-56 z-[60] bg-[#0f1420] border-l border-blue-500/20 text-white flex flex-col transition-all duration-300 transform ${
         isMobileOpen ? "translate-x-0" : "translate-x-full"
       } lg:translate-x-0 lg:flex`}
       dir="rtl"
@@ -186,11 +192,11 @@ export default function Sidebar({ isMobileOpen, onClose }) {
           id="sidebarLogo"
           className="flex items-center gap-3 cursor-pointer group"
         >
-          <div className="bg-yellow-400 p-2 rounded-lg group-hover:rotate-12 transition-transform">
-            <Zap size={20} className="text-black" />
+          <div className="bg-blue-500 p-2 rounded-lg group-hover:rotate-12 transition-transform shadow-lg shadow-blue-500/30">
+            <GraduationCap size={20} className="text-white" />
           </div>
           <span className="sidebar-text font-black italic text-xl tracking-tighter">
-            IRON <span className="text-yellow-400">GYM</span>
+            LANGUAGE <span className="text-blue-400">HUB</span>
           </span>
         </div>
         <button
@@ -219,10 +225,14 @@ export default function Sidebar({ isMobileOpen, onClose }) {
       </nav>
 
       {/* فوتر سایدبار (پروفایل کوتاه) */}
-      <div className="p-4 border-t border-gray-800">
-        <div className="flex items-center gap-3 p-2 bg-gray-900/50 rounded-2xl">
-          <div className="w-10 h-10 rounded-xl bg-yellow-400 flex items-center justify-center text-black font-bold">
-            AD
+      <div className="p-4 border-t border-blue-500/20">
+        <div className="flex items-center gap-3 p-2 bg-blue-500/10 rounded-2xl">
+          <div className="w-10 h-10 rounded-xl bg-blue-500 flex items-center justify-center text-white font-bold shadow-lg shadow-blue-500/30">
+            {roleTitle === "مدیر آموزشگاه"
+              ? "AD"
+              : roleTitle === "مربی زبان"
+                ? "TE"
+                : "ST"}
           </div>
           <div className="sidebar-text">
             <p className="text-sm font-bold">{roleTitle}</p>
@@ -239,7 +249,7 @@ export default function Sidebar({ isMobileOpen, onClose }) {
           background: transparent;
         }
         .custom-scrollbar::-webkit-scrollbar-thumb {
-          background: #333;
+          background: #3b82f6;
           border-radius: 10px;
         }
       `}</style>

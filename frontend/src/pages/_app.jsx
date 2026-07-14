@@ -2,8 +2,8 @@
 import { useRouter } from "next/router";
 import { useEffect } from "react";
 
-import store from "@/redux/store";
 import { Provider } from "react-redux";
+import store from "@/redux/store";
 import { GoogleOAuthProvider } from "@react-oauth/google";
 import ReactModal from "react-modal";
 
@@ -15,40 +15,45 @@ const NEXT_PUBLIC_GOOGLE_CLIENT_ID =
 
 // نقش‌های مجاز برای هر مسیر
 const routeRoleMap = {
-  "/users-dashboard": ["user"],
-  "/trainers-dashboard": ["trainer", "coach"],
+  "/users-dashboard": ["student"],
+  "/trainers-dashboard": ["teacher", "coach"],
   "/manager-dashboard": ["admin"],
-  "/cafe-dashboard": ["cafe"],
-  "/reception-dashboard": ["reception"],
 };
 
 export default function App({ Component, pageProps }) {
   const router = useRouter();
 
-  // ⭐ Route Guard
+  // React Modal fix
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      ReactModal.setAppElement("#__next");
+    }
+  }, []);
+
+  // Route Guard (فعلاً خاموش گذاشتی، همون خوبه)
+  /*
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    const publicRoutes = ["/"]; // فقط صفحه لاگین
+    const publicRoutes = ["/"];
     const currentUserRaw = sessionStorage.getItem("currentUser");
     const currentUser = currentUserRaw ? JSON.parse(currentUserRaw) : null;
 
-    // اگر صفحه عمومی نیست و کاربر لاگین نکرده
     if (!currentUser && !publicRoutes.includes(router.pathname)) {
       router.replace("/");
       return;
     }
 
-    // چک نقش کاربر برای مسیرهای محدود
     const allowedRoles = routeRoleMap[router.pathname];
+
     if (allowedRoles && currentUser) {
       if (!allowedRoles.includes(currentUser.role)) {
-        // نقش مجاز نیست → ریدایرکت به داشبورد خودش
         switch (currentUser.role) {
-          case "user":
+          case "student":
             router.replace("/users-dashboard");
             break;
-          case "trainer":
+          case "teacher":
+          case "coach":
             router.replace("/trainers-dashboard");
             break;
           case "admin":
@@ -66,13 +71,7 @@ export default function App({ Component, pageProps }) {
       }
     }
   }, [router.pathname]);
-
-  // React Modal
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      ReactModal.setAppElement("body");
-    }
-  }, []);
+  */
 
   return (
     <GoogleOAuthProvider clientId={NEXT_PUBLIC_GOOGLE_CLIENT_ID}>

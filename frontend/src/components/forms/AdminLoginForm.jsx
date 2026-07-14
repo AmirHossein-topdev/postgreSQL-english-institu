@@ -17,93 +17,69 @@ import {
   EyeOff,
   User2,
   Book,
+  GraduationCap,
+  BookOpen,
 } from "lucide-react";
 
 import { notifyError, notifySuccess } from "@/utils/toast";
 import { useLoginUserMutation } from "@/redux/features/auth/authApi";
 import ErrorMsg from "../common/error-msg";
+import { FaChalkboardTeacher } from "react-icons/fa";
 
 const ROLES = [
   {
-    key: "user",
-    label: "اعضا",
-    icon: <User size={16} />,
-    accent: "yellow",
+    key: "student",
+    label: "زبان‌آموز",
+    icon: <GraduationCap size={16} />,
+    accent: "cyan",
   },
   {
-    key: "trainer", // 👈 اصلاح شد
-    label: "مربی",
-    icon: <Dumbbell size={16} />,
+    key: "teacher",
+    label: "مربی زبان",
+    icon: <FaChalkboardTeacher size={16} />,
     accent: "green",
   },
   {
     key: "admin",
-    label: "مدیر باشگاه",
+    label: "مدیر آموزشگاه",
     icon: <Shield size={16} />,
     accent: "blue",
-  },
-  {
-    key: "cafe",
-    label: "متصدی کافه",
-    icon: <Coffee size={16} />,
-    accent: "orange",
-  },
-  {
-    key: "reception",
-    label: "متصدی پذیرش باشگاه",
-    icon: <Book size={16} />,
-    accent: "cyan",
   },
 ];
 
 const ACCENT_CLASSES = {
-  yellow: {
-    bg: "bg-yellow-400",
-    hover: "hover:bg-yellow-500",
-    text: "text-black",
-    shadow: "shadow-yellow-400/30",
-  },
-  blue: {
-    bg: "bg-blue-400",
-    hover: "hover:bg-blue-600",
-    text: "text-black",
-    shadow: "shadow-blue-500/30",
+  cyan: {
+    bg: "bg-cyan-500",
+    hover: "hover:bg-cyan-600",
+    text: "text-white",
+    shadow: "shadow-cyan-500/30",
   },
   green: {
     bg: "bg-green-500",
     hover: "hover:bg-green-600",
-    text: "text-black",
+    text: "text-white",
     shadow: "shadow-green-500/30",
   },
-  orange: {
-    bg: "bg-orange-500",
-    hover: "hover:bg-orange-600",
-    text: "text-black",
-    shadow: "shadow-orange-500/30",
-  },
-  cyan: {
-    bg: "bg-cyan-500",
-    hover: "hover:bg-cyan-600",
-    text: "text-black",
-    shadow: "shadow-cyan-500/30",
+  blue: {
+    bg: "bg-blue-500",
+    hover: "hover:bg-blue-600",
+    text: "text-white",
+    shadow: "shadow-blue-500/30",
   },
 };
+
 // نقش‌های API به کلیدهای فرانت
 const ROLE_MAP = {
-  Member: "user",
-  Trainer: "trainer",
+  Student: "student",
+  Teacher: "teacher",
   Admin: "admin",
-  Reception: "reception", // اگر لازم شد
-  CafeManager: "cafe",
 };
 
 // مسیر ریدایرکت بر اساس کلید فرانت
 const roleRedirectMap = {
-  user: "/users-dashboard",
-  trainer: "/trainers-dashboard",
+  student: "/student-dashboard",
+  teacher: "/teacher-dashboard",
   admin: "/manager-dashboard",
-  cafe: "/cafe-dashboard",
-  reception: "/reception-dashboard",
 };
 
 export default function UnifiedLoginForm() {
@@ -181,17 +157,22 @@ export default function UnifiedLoginForm() {
 
   return (
     <div
-      className="min-h-screen flex items-center justify-center bg-[#0f1115] px-4"
+      className="min-h-screen flex items-center justify-center  px-4"
       dir="rtl"
     >
-      <div className="w-full max-w-md bg-[#1a1d23] border border-gray-800 rounded-[2.5rem] shadow-2xl p-8">
+      <div className="w-full max-w-md bg-gradient-to-br from-[#0a1628] to-[#0d1b2a] border border-gray-800 rounded-[2.5rem] shadow-2xl p-8">
         {/* Header */}
         <div className="mb-8 text-center">
+          <div className="flex justify-center mb-4">
+            <div className="bg-blue-500 p-3 rounded-2xl shadow-lg shadow-blue-500/30">
+              <BookOpen className="w-10 h-10 text-white" />
+            </div>
+          </div>
           <h1 className="text-3xl font-black italic text-white">
-            سیستم <span className="text-yellow-400">ورود نئون</span>
+            آموزشگاه <span className="text-blue-400">زبان</span>
           </h1>
-          <p className="text-gray-500 text-[10px] font-black uppercase tracking-widest mt-2">
-            Tactical Access Control
+          <p className="text-gray-400 text-[11px] font-bold uppercase tracking-widest mt-2">
+            سامانه مدیریت هوشمند آموزشگاه
           </p>
         </div>
 
@@ -271,7 +252,7 @@ export default function UnifiedLoginForm() {
             className={`
               w-full py-4 rounded-xl font-black italic transition-all
               disabled:opacity-50 disabled:cursor-not-allowed
-              ${ACCENT_CLASSES[activeRole.accent].bg}
+              // ${ACCENT_CLASSES[activeRole.accent].bg}
               ${ACCENT_CLASSES[activeRole.accent].hover}
               ${ACCENT_CLASSES[activeRole.accent].text}
               ${ACCENT_CLASSES[activeRole.accent].shadow}

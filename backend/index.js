@@ -1,107 +1,108 @@
-// backend/server.js
-require("dotenv").config();
-const express = require("express");
-const path = require("path");
-const cors = require("cors");
-const morgan = require("morgan");
-// --- Database ---
-const connectDB = require("./config/db"); // مسیر فایل کانکت DB (CJS)
+import express from "express";
+import cors from "cors";
+import dotenv from "dotenv";
+import { PrismaClient } from "@prisma/client";
+import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
+import path from "path";
 
-// --- Routes ---
-const userRoutes = require("./routes/user.routes");
-const authRoutes = require("./routes/auth.routes");
-const uploadRoutes = require("./routes/uploadDocument.routes");
-const cafeMenuRoutes = require("./routes/CafeMenu.routes");
-const trainingRequestRoutes = require("./routes/trainingRequest.routes");
-const equipmentRoutes = require("./routes/equipment.routes");
+import userRoutes from "./src/routes/user.routes.js";
+import classRoutes from "./src/routes/class.routes.js";
+import bookRoutes from "./src/routes/book.routes.js";
 
-// --- Middleware ---
-const globalErrorHandler = require("./middleware/global-error-handler");
-const {
-  attachRequestId,
-  requestLogger,
-} = require("./middleware/requestLogger"); // CJS require
+dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 7000;
+const prisma = new PrismaClient();
 
-// --- Basic Middlewares ---
-// CORS
+app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
+
 app.use(
   cors({
-    origin: "http://localhost:3000", // آدرس فرانت‌اند
-    credentials: true, // مهم برای ارسال کوکی‌ها
+    origin: ["http://localhost:3000", "http://127.0.0.1:3000"],
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
   }),
 );
 
-// Body parsers (important: parse body BEFORE requestLogger if you want to log body)
-app.use(express.json({ limit: "10mb" }));
-app.use(express.urlencoded({ extended: true, limit: "10mb" }));
+console.log("✅ CORS middleware enabled");
 
-// Attach a request id for tracing
-app.use(attachRequestId);
+app.use(express.json());
 
-// HTTP request logging (morgan)
-app.use(morgan("dev"));
-
-// Custom request logger (will have parsed body available)
-app.use(requestLogger);
-
-// Static folders
-app.use(express.static(path.join(__dirname, "public")));
-app.use("/uploads", express.static(path.join(__dirname, "uploads")));
-
-// --- Connect to Database ---
-connectDB()
-  .then(() => console.log("MongoDB connected successfully"))
-  .catch((err) => {
-    console.error("MongoDB connection error:", err);
-    // اگر اتصال DB ضروری است، می‌توان سرور را متوقف کرد یا اجازه داد ادامه یابد:
-    // process.exit(1);
-  });
-
-// --- API Routes ---
+// =======================
+// ROUTES
+// =======================
 app.use("/api/users", userRoutes);
-app.use("/api/auth", authRoutes);
-app.use("/api/upload", uploadRoutes);
-app.use("/api/training-requests", trainingRequestRoutes);
-app.use("/api/equipment", equipmentRoutes);
+app.use("/api/class", classRoutes);
+app.use("/api/books", bookRoutes); // تمام درخواست‌های مربوط به کتاب‌ها از این پس کاملاً و درست از درون فایل خودش مدیریت می‌شوند
 
-// و برای پوشه‌ی آپلودها
-app.use("/uploads", express.static(path.join(__dirname, "uploads")));
-// --- Root Route ---
-app.get("/", (req, res) => res.send("Server is running successfully"));
+// =======================
+// AUTH ROUTES
+// =======================
+app.post("/api/auth/register", async (req, res) => {
+  try {
+    const { name, employeeCode, password, email, role } = req.body;
+    const existing = await prisma.user.findUnique({ where: { employeeCode } });
+    if (existing)
+      return res.status(400).json({ message: "User already exists" });
 
-// --- 404 Handler (اگر به این نقطه رسیدیم یعنی route پیدا نشده) ---
-app.use((req, res, next) => {
-  res.status(404).json({
-    success: false,
-    message: "Not Found",
-    errorMessages: [
-      {
-        path: req.originalUrl,
-        message: "API Not Found",
+    const hashed = await bcrypt.hash(password, 10);
+    const user = await prisma.user.create({
+      data: {
+        name,
+        employeeCode,
+        password: hashed,
+        email,
+        role: role || "Student",
       },
-    ],
-  });
+    });
+
+    const token = jwt.sign(
+      { id: user.id, role: user.role },
+      process.env.JWT_SECRET,
+      { expiresIn: "7d" },
+    );
+    res.status(201).json({ user, token });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
 });
 
-// --- Global Error Handler (باید بعد از همه route ها و 404 بیاید) ---
-app.use(globalErrorHandler);
+app.post("/api/auth/login", async (req, res) => {
+  try {
+    const { employeeCode, password } = req.body;
+    const user = await prisma.user.findUnique({ where: { employeeCode } });
+    if (!user) return res.status(400).json({ message: "User not found" });
 
-// --- Optional: global unhandled rejection / uncaughtException handlers ---
-process.on("unhandledRejection", (reason, promise) => {
-  console.error("Unhandled Rejection at:", promise, "reason:", reason);
-});
-process.on("uncaughtException", (err) => {
-  console.error("Uncaught Exception:", err);
-  // در محیط production ممکن است نیاز باشد پروسه را ری‌استارت کنید
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) return res.status(400).json({ message: "Wrong password" });
+
+    const token = jwt.sign(
+      { id: user.id, role: user.role },
+      process.env.JWT_SECRET,
+      { expiresIn: "7d" },
+    );
+    res.json({ user, token });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
 });
 
-// --- Start Server ---
+// =======================
+// TEST ROUTE
+// =======================
+app.get("/", (req, res) => res.send("API is running..."));
+
+// =======================
+// SERVER
+// =======================
+const PORT = process.env.PORT || 5000;
+
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`✅ Class routes mounted at /api/class`);
 });
 
-// Export app برای تست یا موارد دیگر
-module.exports = app;
+// Export prisma برای استفاده در routeها
+export { prisma };

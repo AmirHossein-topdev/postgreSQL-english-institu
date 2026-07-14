@@ -4,7 +4,7 @@ const path = require("path");
 const fs = require("fs");
 
 // مسیر پیش‌فرض ذخیره عکس‌ها
-const baseUploadDir = path.join(__dirname, "../../frontend/public/images");
+const baseUploadDir = path.join(__dirname, "../../backend/uploads/images");
 
 /**
  * تابعی که یک uploader با پوشه دلخواه می‌سازد

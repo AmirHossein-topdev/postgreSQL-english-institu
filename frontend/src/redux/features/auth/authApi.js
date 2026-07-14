@@ -1,11 +1,12 @@
-import { apiSlice } from "@/redux/api/apiSlice";
+// frontend\src\redux\features\auth\authApi.js
+import { baseApi } from "@/redux/api/baseApi";
 import { userLoggedIn } from "./authSlice";
 import Cookies from "js-cookie";
 import Swal from "sweetalert2";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL;
 
-export const authApi = apiSlice.injectEndpoints({
+export const authApi = baseApi.injectEndpoints({
   overrideExisting: true,
   endpoints: (builder) => ({
     // ===============================
@@ -28,7 +29,7 @@ export const authApi = apiSlice.injectEndpoints({
               accessToken: result.data.token,
               user: result.data.user,
             }),
-            { expires: 1 }
+            { expires: 1 },
           );
 
           // ذخیره در Redux
@@ -36,7 +37,7 @@ export const authApi = apiSlice.injectEndpoints({
             userLoggedIn({
               accessToken: result.data.token,
               user: result.data.user,
-            })
+            }),
           );
 
           // پیام موفقیت
@@ -66,7 +67,7 @@ export const authApi = apiSlice.injectEndpoints({
           dispatch(
             userLoggedIn({
               user: result.data,
-            })
+            }),
           );
         } catch (err) {
           console.error("Get user failed:", err);
@@ -89,14 +90,14 @@ export const authApi = apiSlice.injectEndpoints({
               accessToken: result.data.token,
               user: result.data.user,
             }),
-            { expires: 0.5 }
+            { expires: 0.5 },
           );
 
           dispatch(
             userLoggedIn({
               accessToken: result.data.token,
               user: result.data.user,
-            })
+            }),
           );
         } catch (err) {
           console.error("Confirm email failed:", err);
@@ -156,14 +157,14 @@ export const authApi = apiSlice.injectEndpoints({
               accessToken: result.data.token,
               user: result.data.user,
             }),
-            { expires: 0.5 }
+            { expires: 0.5 },
           );
 
           dispatch(
             userLoggedIn({
               accessToken: result.data.token,
               user: result.data.user,
-            })
+            }),
           );
         } catch (err) {
           console.error("Update profile failed:", err);

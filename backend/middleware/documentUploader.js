@@ -4,7 +4,7 @@ const path = require("path");
 const fs = require("fs");
 
 // مسیر ذخیره فایل‌های سند
-const baseUploadDir = path.join(__dirname, "../../frontend/public/documents");
+const baseUploadDir = path.join(__dirname, "../../backend/public/documents");
 
 const createDocumentUploader = (subFolder = "") => {
   const uploadDir = path.join(baseUploadDir, subFolder);
