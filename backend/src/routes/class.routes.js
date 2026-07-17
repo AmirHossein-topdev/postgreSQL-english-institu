@@ -2,119 +2,143 @@
 
 import express from "express";
 import { PrismaClient } from "@prisma/client";
+import { protect, authorize } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 const prisma = new PrismaClient();
 
-// Middleware موقت - در پروژه واقعی باید جایگزین شود
-const authMiddleware = (req, res, next) => {
-  // در اینجا می‌توانید احراز هویت واقعی را پیاده‌سازی کنید
-  // فعلاً یک کاربر تستی برای توسعه
-  req.user = { id: "test-admin-id", role: "Admin" };
-  next();
-};
-
-const roleMiddleware = (roles) => (req, res, next) => {
-  // در اینجا بررسی نقش کاربر
-  if (!req.user || !roles.includes(req.user.role)) {
-    return res.status(403).json({
-      success: false,
-      message: "Access denied. Insufficient permissions.",
-    });
-  }
-  next();
-};
-
 // =======================
 // ✅ CREATE: ایجاد کلاس جدید توسط مدیر
 // =======================
-router.post(
-  "/",
-  authMiddleware,
-  roleMiddleware(["Admin"]),
-  async (req, res) => {
-    try {
-      const {
-        name,
-        level,
-        teacherId,
-        studentIds,
-        term,
-        tuition,
-        schedule,
-        room,
-        status,
-        startDate,
-        endDate,
-        capacity,
-        totalSessions,
-        description,
-      } = req.body;
+router.post("/", protect(["Admin"]), async (req, res) => {
+  try {
+    const {
+      name,
+      level,
+      teacherId,
+      studentIds,
+      term,
+      tuition,
+      schedule,
+      room,
+      status,
+      startDate,
+      endDate,
+      capacity,
+      totalSessions,
+      description,
+    } = req.body;
 
-      // اعتبارسنجی ورودی‌ها
-      if (!name || !term) {
+    // اعتبارسنجی ورودی‌ها
+    if (!name || !term) {
+      return res.status(400).json({
+        success: false,
+        message: "نام و ترم الزامی است",
+      });
+    }
+
+    // بررسی وجود استاد
+    if (teacherId) {
+      const teacher = await prisma.user.findFirst({
+        where: {
+          id: teacherId,
+          role: "Teacher",
+          status: "ACTIVE",
+        },
+      });
+      if (!teacher) {
         return res.status(400).json({
           success: false,
-          message: "Name and term are required fields",
+          message: "استاد مورد نظر یافت نشد یا غیرفعال است",
         });
       }
+    }
 
-      // بررسی وجود استاد
-      if (teacherId) {
-        const teacher = await prisma.user.findFirst({
-          where: {
-            id: teacherId,
-            role: "Teacher",
-            status: "ACTIVE",
-          },
-        });
-        if (!teacher) {
-          return res.status(400).json({
-            success: false,
-            message: "Teacher not found or not active",
-          });
-        }
-      }
-
-      // بررسی وجود دانشجوها (اختیاری)
-      if (studentIds && studentIds.length > 0) {
-        const students = await prisma.user.findMany({
-          where: {
-            id: { in: studentIds },
-            role: "Student",
-            status: "ACTIVE",
-          },
-        });
-        if (students.length !== studentIds.length) {
-          return res.status(400).json({
-            success: false,
-            message: "Some students not found or inactive",
-          });
-        }
-      }
-
-      console.log("🔍 req.user:", req.user);
-      console.log("🔍 req.user?.id:", req.user?.id);
-      // ایجاد کلاس جدید
-      const newClass = await prisma.class.create({
-        data: {
-          name,
-          level: level || "A1",
-          teacherId: teacherId || null,
-          term,
-          tuition: tuition ? parseFloat(tuition) : 0,
-          schedule: schedule || "",
-          room: room || "",
-          status: status || "UNDER_REGISTRATION",
-          // createdById: req.user?.id,
-          createdById: "2bf47aed-5afd-4a0e-862b-ec5d45988e3d",
-          startDate: startDate ? new Date(startDate) : null,
-          endDate: endDate ? new Date(endDate) : null,
-          capacity: capacity || 10,
-          totalSessions: totalSessions || 12,
-          description: description || "",
-          isConfirmed: false,
+    // بررسی وجود دانشجوها (اختیاری)
+    if (studentIds && studentIds.length > 0) {
+      const students = await prisma.user.findMany({
+        where: {
+          id: { in: studentIds },
+          role: "Student",
+          status: "ACTIVE",
         },
+      });
+      if (students.length !== studentIds.length) {
+        return res.status(400).json({
+          success: false,
+          message: "برخی از دانشجویان یافت نشدند یا غیرفعال هستند",
+        });
+      }
+    }
+
+    // بررسی وجود کاربر ایجادکننده
+    if (!req.user || !req.user.id) {
+      return res.status(401).json({
+        success: false,
+        message: "احراز هویت ناموفق. لطفاً دوباره لاگین کنید.",
+      });
+    }
+
+    console.log("🔍 req.user:", req.user);
+    console.log("🔍 req.user?.id:", req.user?.id);
+
+    // ایجاد کلاس جدید
+    const newClass = await prisma.class.create({
+      data: {
+        name,
+        level: level || "A1",
+        teacherId: teacherId || null,
+        term,
+        tuition: tuition ? parseFloat(tuition) : 0,
+        schedule: schedule || "",
+        room: room || "",
+        status: status || "UNDER_REGISTRATION",
+        createdById: req.user.id,
+        startDate: startDate ? new Date(startDate) : null,
+        endDate: endDate ? new Date(endDate) : null,
+        capacity: capacity || 10,
+        totalSessions: totalSessions || 12,
+        description: description || "",
+        isConfirmed: false,
+      },
+      include: {
+        teacher: {
+          select: {
+            id: true,
+            name: true,
+            employeeCode: true,
+            email: true,
+            phone: true,
+          },
+        },
+        enrollments: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                name: true,
+                employeeCode: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    // افزودن دانشجویان به Enrollment
+    if (studentIds && studentIds.length > 0) {
+      await prisma.enrollment.createMany({
+        data: studentIds.map((studentId) => ({
+          userId: studentId,
+          classId: newClass.id,
+          status: "IN_PROGRESS",
+        })),
+        skipDuplicates: true,
+      });
+
+      // دریافت مجدد کلاس با اطلاعات به‌روز
+      const updatedClass = await prisma.class.findUnique({
+        where: { id: newClass.id },
         include: {
           teacher: {
             select: {
@@ -139,61 +163,44 @@ router.post(
         },
       });
 
-      // افزودن دانشجویان به Enrollment
-      if (studentIds && studentIds.length > 0) {
-        await prisma.enrollment.createMany({
-          data: studentIds.map((studentId) => ({
-            userId: studentId,
-            classId: newClass.id,
-            status: "IN_PROGRESS",
-          })),
-          skipDuplicates: true,
-        });
-
-        // دریافت مجدد کلاس با اطلاعات به‌روز
-        const updatedClass = await prisma.class.findUnique({
-          where: { id: newClass.id },
-          include: {
-            teacher: {
-              select: {
-                id: true,
-                name: true,
-                employeeCode: true,
-                email: true,
-                phone: true,
-              },
-            },
-            enrollments: {
-              include: {
-                user: {
-                  select: {
-                    id: true,
-                    name: true,
-                    employeeCode: true,
-                  },
-                },
-              },
-            },
-          },
-        });
-
-        return res.status(201).json({
-          success: true,
-          data: updatedClass,
-        });
-      }
-
-      res.status(201).json({ success: true, data: newClass });
-    } catch (err) {
-      console.error("❌ Error creating class:", err);
-      res.status(500).json({
-        success: false,
-        message: "Internal server error",
-        error: process.env.NODE_ENV === "development" ? err.message : undefined,
+      return res.status(201).json({
+        success: true,
+        message: "کلاس با موفقیت ایجاد شد",
+        data: updatedClass,
       });
     }
-  },
-);
+
+    res.status(201).json({
+      success: true,
+      message: "کلاس با موفقیت ایجاد شد",
+      data: newClass,
+    });
+  } catch (err) {
+    console.error("❌ Error creating class:", err);
+
+    // خطای Prisma - کلید خارجی
+    if (err.code === "P2003") {
+      return res.status(400).json({
+        success: false,
+        message: "مشکل در ارتباط با کاربر ایجادکننده. لطفاً دوباره لاگین کنید.",
+      });
+    }
+
+    // خطای Prisma - تکراری
+    if (err.code === "P2002") {
+      return res.status(400).json({
+        success: false,
+        message: "کلاس با این مشخصات قبلاً ثبت شده است",
+      });
+    }
+
+    res.status(500).json({
+      success: false,
+      message: "خطای داخلی سرور",
+      error: process.env.NODE_ENV === "development" ? err.message : undefined,
+    });
+  }
+});
 
 // =======================
 // ✅ UPDATE: آپدیت کلاس
