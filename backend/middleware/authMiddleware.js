@@ -1,6 +1,8 @@
 // backend/middleware/authMiddleware.js
 const jwt = require("jsonwebtoken");
-const User = require("../model/User");
+const { PrismaClient } = require("@prisma/client");
+
+const prisma = new PrismaClient();
 
 // Middleware برای احراز هویت
 // میتونی roles رو به عنوان آرایه پاس بدی، برای محدود کردن دسترسی به نقش‌های خاص
@@ -38,8 +40,42 @@ const protect =
         });
       }
 
-      // 4️⃣ گرفتن اطلاعات کاربر از DB
-      const user = await User.findById(decoded.id).select("-password");
+      // 4️⃣ گرفتن اطلاعات کاربر از DB با Prisma
+      const user = await prisma.user.findUnique({
+        where: { id: decoded.id },
+        select: {
+          id: true,
+          name: true,
+          employeeCode: true,
+          email: true,
+          phone: true,
+          role: true,
+          status: true,
+          profileImage: true,
+          birthday: true,
+          address: true,
+          createdAt: true,
+          updatedAt: true,
+          teacherProfile: {
+            select: {
+              id: true,
+              specialization: true,
+              hireDate: true,
+              salary: true,
+              resume: true,
+            },
+          },
+          studentProfile: {
+            select: {
+              id: true,
+              level: true,
+              emergencyPhone: true,
+              registeredDate: true,
+            },
+          },
+        },
+      });
+
       if (!user) {
         return res.status(404).json({
           success: false,
@@ -48,7 +84,7 @@ const protect =
       }
 
       // 5️⃣ بررسی نقش‌ها (اگر داده شده)
-      if (roles.length && !roles.includes(user.role.name)) {
+      if (roles.length && !roles.includes(user.role)) {
         return res.status(403).json({
           success: false,
           message: "دسترسی کافی برای این عملیات ندارید.",

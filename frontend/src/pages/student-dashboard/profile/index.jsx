@@ -39,46 +39,42 @@ export default function MyProfilePage() {
 
         let res, json;
 
-        if (currentUser && currentUser._id) {
-          // اگر id موجود است، سعی کن کاربر خاص را از endpoint تک‌کاربر بگیری
-          // (فرض می‌کنیم endpoint ممکن است /api/users/:id وجود داشته باشد)
+        if (currentUser && currentUser.id) {
+          // ✅ تغییر: از id به جای _id استفاده کن (Prisma از id استفاده می‌کند)
           try {
             res = await fetch(
-              `http://localhost:7000/api/users/${currentUser._id}`,
+              `http://localhost:5000/api/users/${currentUser.id}`,
               { signal: ac.signal },
             );
             json = await res.json();
-            // سازگاری با چند نوع پاسخ ممکن:
-            // 1) { success: true, user: { ... } }
-            // 2) { ...userFields } (خود آبجکت کاربر)
-            // 3) { success: true, users: [ ... ] } (لیستی که باید فیلتر شود)
+
             if (json) {
-              if (json.user) {
-                setUser(json.user);
-              } else if (json._id) {
+              if (json.data) {
+                // ✅ ساختار پاسخ Prisma: { success: true, data: { ...user } }
+                setUser(json.data);
+              } else if (json.id) {
                 setUser(json);
               } else if (Array.isArray(json.users)) {
-                const found = json.users.find((u) => u._id === currentUser._id);
+                const found = json.users.find((u) => u.id === currentUser.id);
                 setUser(found ?? null);
               } else {
-                // اگر پاسخ غیرمنتظره بود، تلاش کن لیست کلی را دریافت کنی
                 throw new Error("Unexpected single-user response");
               }
             }
           } catch (err) {
             // اگر endpoint تک‌کاربر خطا داد یا در دسترس نبود، از لیست استفاده کن و جستجو کن
             if (err.name !== "AbortError") {
-              const listRes = await fetch("http://localhost:7000/api/users", {
+              const listRes = await fetch("http://localhost:5000/api/users", {
                 signal: ac.signal,
               });
               const listJson = await listRes.json();
-              if (listJson && Array.isArray(listJson.users)) {
-                const found = listJson.users.find(
-                  (u) => u._id === currentUser._id,
-                );
-                setUser(found ?? null);
-              } else if (Array.isArray(listJson)) {
-                const found = listJson.find((u) => u._id === currentUser._id);
+
+              // ✅ سازگاری با ساختار Prisma: { success: true, data: { users: [], pagination: {} } }
+              const usersList =
+                listJson?.data?.users || listJson?.users || listJson || [];
+
+              if (Array.isArray(usersList)) {
+                const found = usersList.find((u) => u.id === currentUser.id);
                 setUser(found ?? null);
               } else {
                 setUser(null);
@@ -87,18 +83,17 @@ export default function MyProfilePage() {
           }
         } else {
           // اگر currentUser در sessionStorage نبود → بعنوان fallback اولین کاربر از لیست را نمایش بده
-          const listRes = await fetch("http://localhost:7000/api/users", {
+          const listRes = await fetch("http://localhost:5000/api/users", {
             signal: ac.signal,
           });
           const listJson = await listRes.json();
-          if (
-            listJson &&
-            Array.isArray(listJson.users) &&
-            listJson.users.length
-          ) {
-            setUser(listJson.users[0]);
-          } else if (Array.isArray(listJson) && listJson.length) {
-            setUser(listJson[0]);
+
+          // ✅ سازگاری با ساختار Prisma
+          const usersList =
+            listJson?.data?.users || listJson?.users || listJson || [];
+
+          if (Array.isArray(usersList) && usersList.length) {
+            setUser(usersList[0]);
           } else {
             setUser(null);
           }
@@ -145,7 +140,11 @@ export default function MyProfilePage() {
     );
   }
 
-  const isActive = user.status === "active";
+  // ✅ تغییر: status در Prisma "ACTIVE" یا "INACTIVE" است
+  const isActive = user.status === "ACTIVE";
+
+  // ✅ دریافت level از studentProfile (اگر کاربر Student باشد)
+  const userLevel = user.studentProfile?.level || user.level || "—";
 
   return (
     <DashboardLayout>
@@ -174,13 +173,13 @@ export default function MyProfilePage() {
           {/* Top */}
           <div className="flex flex-col sm:flex-row gap-6 items-center border-b border-gray-800 pb-6 mb-6">
             <div className="relative">
-              <div className="w-28 h-28 rounded-2xl bg-transparent flex items-center justify-center  overflow-hidden shadow-lg">
-                {user.profileImage ? (
-                  // اگر مسیر نسبی است، می‌تونی آن را با آدرس پایه سرور ترکیب کنی (در صورت نیاز)
+              <div className="w-28 h-28 rounded-2xl bg-transparent flex items-center justify-center overflow-hidden shadow-lg">
+                {user.profileImage &&
+                user.profileImage !== "default-avatar.png" ? (
                   <img
-                    src={`http://localhost:7000/uploads/${user.profileImage}`}
+                    src={`http://localhost:5000/uploads${user.profileImage}`}
                     alt={user.name || "User"}
-                    className="w-full h-full object-fill"
+                    className="w-full h-full object-cover"
                   />
                 ) : (
                   <span className="text-blue-400 text-4xl font-black">
@@ -205,17 +204,17 @@ export default function MyProfilePage() {
               </h3>
 
               <p className="text-gray-500 text-xs uppercase tracking-widest mt-1">
-                {typeof user.role === "string" ? user.role : "User"}
+                {user.role || "User"}
               </p>
 
               <span
                 className={`inline-block mt-3 px-4 py-1 rounded-lg text-[11px] font-bold uppercase ${
                   isActive
-                    ? "bg-blue-400 text-black"
+                    ? "bg-green-500 text-black"
                     : "bg-gray-700 text-gray-300"
                 }`}
               >
-                {isActive ? "Active Member" : "Inactive"}
+                {isActive ? "فعال" : "غیرفعال"}
               </span>
             </div>
           </div>
@@ -226,7 +225,7 @@ export default function MyProfilePage() {
             <Info icon={Phone} label="شماره تماس" value={user.phone} />
             <Info icon={MapPin} label="آدرس" value={user.address} />
             <Info icon={ShieldCheck} label="نقش" value={user.role} />
-            <Info icon={FaLevelUpAlt} label="سطح" value={user.level} />
+            <Info icon={FaLevelUpAlt} label="سطح" value={userLevel} />
             <Info
               icon={Calendar}
               label="تاریخ عضویت"
@@ -241,7 +240,7 @@ export default function MyProfilePage() {
           {/* Actions */}
           <div className="flex flex-col sm:flex-row gap-4 mt-8">
             <Link
-              href="/student-dashboard/profile/edit"
+              href={`/student-dashboard/profile/${user.id}/edit`}
               className="flex-1 flex items-center justify-center gap-2 bg-blue-400 hover:bg-blue-600 text-black py-4 rounded-2xl font-black transition-all"
             >
               <Lock size={18} />

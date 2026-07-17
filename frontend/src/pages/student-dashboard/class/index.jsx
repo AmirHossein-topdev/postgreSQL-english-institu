@@ -39,10 +39,17 @@ import Swal from "sweetalert2";
 // کامپوننت کارت کلاس
 const ClassCard = ({ classItem, isSelected, onClick }) => {
   const statusColors = {
-    فعال: "text-emerald-400 border-emerald-400/20 bg-emerald-500/10",
-    "در حال ثبت‌نام": "text-blue-400 border-blue-400/20 bg-blue-500/10",
-    "تکمیل شده": "text-purple-400 border-purple-400/20 bg-purple-500/10",
-    "لغو شده": "text-red-400 border-red-400/20 bg-red-500/10",
+    ACTIVE: "text-emerald-400 border-emerald-400/20 bg-emerald-500/10",
+    UNDER_REGISTRATION: "text-blue-400 border-blue-400/20 bg-blue-500/10",
+    COMPLETED: "text-purple-400 border-purple-400/20 bg-purple-500/10",
+    CANCELED: "text-red-400 border-red-400/20 bg-red-500/10",
+  };
+
+  const statusMap = {
+    ACTIVE: "فعال",
+    UNDER_REGISTRATION: "در حال ثبت‌نام",
+    COMPLETED: "تکمیل شده",
+    CANCELED: "لغو شده",
   };
 
   return (
@@ -76,7 +83,7 @@ const ClassCard = ({ classItem, isSelected, onClick }) => {
         <span
           className={`text-[9px] font-black px-2 py-1 rounded-full border ${statusColors[classItem.status]}`}
         >
-          {classItem.status}
+          {statusMap[classItem.status] || classItem.status}
         </span>
       </div>
 
@@ -97,7 +104,9 @@ const ClassCard = ({ classItem, isSelected, onClick }) => {
         </div>
         <div className="flex items-center gap-2">
           <DollarSign size={12} className="text-emerald-400" />
-          <span>شهریه: {classItem.tuition?.toLocaleString()} تومان</span>
+          <span>
+            شهریه: {Number(classItem.tuition).toLocaleString("en-US")} تومان
+          </span>
         </div>
       </div>
     </div>
@@ -109,15 +118,20 @@ const TeacherCard = ({ teacher }) => {
   return (
     <div className="bg-[#1a1f2e] p-4 rounded-xl border border-blue-500/20 hover:border-blue-400/60 transition-all group">
       <div className="flex items-center gap-4">
-        <div className="w-12 h-12 rounded-xl flex items-center justify-center text-blue-400">
-          {teacher.profileImage ? (
+        <div className="w-12 h-12 rounded-xl flex items-center justify-center text-blue-400 overflow-hidden">
+          {teacher.profileImage &&
+          teacher.profileImage !== "default-avatar.png" ? (
             <img
-              src={`http://localhost:7000/uploads/${teacher.profileImage}`}
+              src={
+                teacher.profileImage.startsWith("http")
+                  ? teacher.profileImage
+                  : `http://localhost:5000/uploads${teacher.profileImage}`
+              }
               alt={teacher.name}
               className="w-full h-full object-cover rounded-xl"
             />
           ) : (
-            <span className="text-lg font-black">
+            <span className="text-lg font-black bg-blue-500/20 w-full h-full flex items-center justify-center rounded-xl">
               {teacher.name?.charAt(0)}
             </span>
           )}
@@ -131,7 +145,7 @@ const TeacherCard = ({ teacher }) => {
               </p>
             </div>
             <span className="text-[8px] font-black text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded-full">
-              {teacher.specialization || "مدرس زبان"}
+              {teacher.teacherProfile?.specialization || "مدرس زبان"}
             </span>
           </div>
           <div className="flex gap-3 mt-2 text-[10px] text-gray-500">
@@ -160,7 +174,8 @@ export default function StudentClassesPage() {
         const user = JSON.parse(storedUser);
         console.log("👤 user:", user);
         console.log("🎭 user.role:", user.role);
-        if (user.role === "student") {
+        // ✅ بررسی نقش با مقدار واقعی از Prisma
+        if (user.role === "student" || user.role === "Student") {
           setCurrentStudent(user);
           console.log("✅ دانشجو ست شد:", user.name);
         } else {
@@ -174,14 +189,17 @@ export default function StudentClassesPage() {
     }
   }, []);
 
-  // گرفتن کلاس‌های دانشجو جاری (با استفاده از studentIds)
+  // گرفتن کلاس‌های دانشجو جاری
+  const studentId = currentStudent?.id || currentStudent?._id;
+  console.log("🔍 studentId for query:", studentId);
+
   const {
     data: studentClasses = [],
     isLoading: classesLoading,
     refetch: refetchClasses,
     error: classesError,
-  } = useGetClassesByStudentQuery(currentStudent?._id, {
-    skip: !currentStudent?._id,
+  } = useGetClassesByStudentQuery(studentId, {
+    skip: !studentId,
   });
 
   // نرمالایز کردن داده کلاس‌ها
@@ -201,7 +219,7 @@ export default function StudentClassesPage() {
     console.log("📚 کلاس‌های دانشجو:", items);
     return items.map((cls) => ({
       ...cls,
-      studentsCount: cls.studentIds?.length || 0,
+      studentsCount: cls.enrollments?.length || cls.studentIds?.length || 0,
     }));
   }, [studentClasses]);
 
@@ -212,16 +230,16 @@ export default function StudentClassesPage() {
     if (selectedClass?.teacherId) {
       const teacherId =
         typeof selectedClass.teacherId === "object"
-          ? selectedClass.teacherId._id
+          ? selectedClass.teacherId.id || selectedClass.teacherId._id
           : selectedClass.teacherId;
 
       const fetchTeacher = async () => {
         try {
           const response = await fetch(
-            `http://localhost:7000/api/users/${teacherId}`,
+            `http://localhost:5000/api/users/${teacherId}`,
           );
           const data = await response.json();
-          setSelectedTeacher(data.user || data.data);
+          setSelectedTeacher(data.data || data.user || data);
         } catch (error) {
           console.error("Error fetching teacher:", error);
         }
@@ -239,7 +257,7 @@ export default function StudentClassesPage() {
   // لاگ‌های دیباگ
   console.log("====================================");
   console.log("🔍 currentStudent:", currentStudent);
-  console.log("🔍 currentStudent?._id:", currentStudent?._id);
+  console.log("🔍 currentStudent?.id:", currentStudent?.id);
   console.log("🔍 studentClasses:", studentClasses);
   console.log("🔍 classes پردازش شده:", classes);
   console.log("🔍 تعداد کلاس‌ها:", classes.length);
@@ -361,9 +379,12 @@ export default function StudentClassesPage() {
                   )
                   .map((classItem) => (
                     <ClassCard
-                      key={classItem._id}
+                      key={classItem.id || classItem._id}
                       classItem={classItem}
-                      isSelected={selectedClass?._id === classItem._id}
+                      isSelected={
+                        selectedClass?.id === classItem.id ||
+                        selectedClass?._id === classItem._id
+                      }
                       onClick={handleClassClick}
                     />
                   ))
@@ -406,14 +427,22 @@ export default function StudentClassesPage() {
                     </span>
                     <span
                       className={`px-3 py-1 rounded-full ${
-                        selectedClass.status === "فعال"
+                        selectedClass.status === "ACTIVE"
                           ? "bg-emerald-500/10 text-emerald-400"
-                          : selectedClass.status === "در حال ثبت‌نام"
+                          : selectedClass.status === "UNDER_REGISTRATION"
                             ? "bg-blue-500/10 text-blue-400"
                             : "bg-gray-500/10 text-gray-400"
                       }`}
                     >
-                      {selectedClass.status}
+                      {selectedClass.status === "ACTIVE"
+                        ? "فعال"
+                        : selectedClass.status === "UNDER_REGISTRATION"
+                          ? "در حال ثبت‌نام"
+                          : selectedClass.status === "COMPLETED"
+                            ? "تکمیل شده"
+                            : selectedClass.status === "CANCELED"
+                              ? "لغو شده"
+                              : selectedClass.status}
                     </span>
                   </div>
                 </div>
@@ -496,7 +525,7 @@ export default function StudentClassesPage() {
                         <div
                           className="h-full rounded-full bg-gradient-to-r from-blue-500 to-cyan-400"
                           style={{
-                            width: `${(selectedClass.studentsCount / selectedClass.capacity) * 100}%`,
+                            width: `${selectedClass.capacity > 0 ? (selectedClass.studentsCount / selectedClass.capacity) * 100 : 0}%`,
                           }}
                         ></div>
                       </div>
@@ -510,7 +539,8 @@ export default function StudentClassesPage() {
                     <div className="flex justify-between text-[12px]">
                       <span className="text-gray-500">شهریه کلاس:</span>
                       <span className="text-emerald-400 font-bold">
-                        {selectedClass.tuition?.toLocaleString()} تومان
+                        {Number(selectedClass.tuition)?.toLocaleString("en-US")}{" "}
+                        تومان
                       </span>
                     </div>
                   </div>
@@ -534,13 +564,13 @@ export default function StudentClassesPage() {
                 {/* دکمه‌های اقدام */}
                 <div className="flex gap-3 pt-2">
                   <Link
-                    href={`/student-dashboard/attendance?class=${selectedClass._id}`}
+                    href={`/student-dashboard/attendance?class=${selectedClass.id || selectedClass._id}`}
                     className="flex-1 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 text-center font-bold py-3 rounded-xl transition-all border border-blue-500/30"
                   >
                     مشاهده حضور و غیاب
                   </Link>
                   <Link
-                    href={`/student-dashboard/grades?class=${selectedClass._id}`}
+                    href={`/student-dashboard/grades?class=${selectedClass.id || selectedClass._id}`}
                     className="flex-1 bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 text-center font-bold py-3 rounded-xl transition-all border border-purple-500/30"
                   >
                     مشاهده نمرات

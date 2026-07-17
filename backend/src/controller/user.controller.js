@@ -24,19 +24,19 @@ class UserController {
         password: req.body.password,
         email: req.body.email,
         role: req.body.role || "Student",
-        phone: req.body.phone, // ✅ اصلاح: contactNumber -> phone
+        phone: req.body.phone,
         address: req.body.address,
-        status: req.body.status || "active",
+        status: req.body.status ? req.body.status.toUpperCase() : "ACTIVE",
         profileImage: req.file
           ? `/uploads/users/${req.file.filename}`
-          : undefined,
+          : "default-avatar.png",
         birthday: req.body.birthday,
         // فیلدهای اضافی برای استاد
         specialization: req.body.specialization,
-        hireDate: req.body.hireDate,
-        salary: req.body.salary,
+        hireDate: req.body.hireDate ? new Date(req.body.hireDate) : null,
+        salary: req.body.salary ? parseFloat(req.body.salary) : null,
         // فیلدهای اضافی برای دانشجو
-        level: req.body.level,
+        level: req.body.level || "A1",
         emergencyPhone: req.body.emergencyPhone,
       };
 
@@ -65,7 +65,7 @@ class UserController {
     try {
       // آپلود تصویر
       if (req.file) {
-        req.body.profileImage = `/images/users/${req.file.filename}`;
+        req.body.profileImage = `/uploads/users/${req.file.filename}`;
       }
 
       // هش کردن پسورد در صورت داده شدن
@@ -74,6 +74,21 @@ class UserController {
         req.body.password = await bcrypt.hash(req.body.password, salt);
       } else {
         delete req.body.password;
+      }
+
+      // تبدیل status به uppercase اگر وجود داشته باشد
+      if (req.body.status) {
+        req.body.status = req.body.status.toUpperCase();
+      }
+
+      // تبدیل hireDate به Date اگر وجود داشته باشد
+      if (req.body.hireDate) {
+        req.body.hireDate = new Date(req.body.hireDate);
+      }
+
+      // تبدیل salary به Number اگر وجود داشته باشد
+      if (req.body.salary) {
+        req.body.salary = parseFloat(req.body.salary);
       }
 
       const updatedUser = await UserService.updateUser(req.params.id, req.body);
@@ -166,10 +181,11 @@ class UserController {
   // =======================
   async changeUserStatus(req, res) {
     try {
-      const user = await UserService.changeUserStatus(
-        req.params.id,
-        req.body.status,
-      );
+      const status = req.body.status.toUpperCase();
+      if (!["ACTIVE", "INACTIVE"].includes(status)) {
+        throw new Error("Invalid status. Must be ACTIVE or INACTIVE");
+      }
+      const user = await UserService.changeUserStatus(req.params.id, status);
       res.json({ success: true, data: user });
     } catch (err) {
       res.status(400).json({ success: false, message: err.message });
@@ -185,7 +201,7 @@ class UserController {
       const result = await UserService.listUsers({
         page: parseInt(page) || 1,
         limit: parseInt(limit) || 10,
-        status,
+        status: status ? status.toUpperCase() : undefined,
         role,
       });
       res.json({ success: true, data: result });

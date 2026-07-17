@@ -1,4 +1,4 @@
-// frontend\src\pages\trainers-dashboard\components\Header.jsx
+// frontend/src/pages/trainers-dashboard/components/Header.jsx
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
@@ -6,6 +6,7 @@ import Image from "next/image";
 import { useRouter } from "next/router";
 import Swal from "sweetalert2";
 import "sweetalert2/dist/sweetalert2.min.css";
+import Link from "next/link";
 
 import {
   Menu,
@@ -15,101 +16,20 @@ import {
   ShieldCheck,
   Zap,
   ChevronDown,
+  User,
 } from "lucide-react";
 
-/**
- * Header component:
- * - می‌خونه currentUser از sessionStorage
- * - با _id به http://localhost:7000/api/users درخواست می‌زنه و کاربر رو پیدا می‌کنه
- * - اطلاعات رو در هدر نمایش می‌ده و امکان خروج داره
- */
+import { useListUsersQuery } from "@/redux/features/userApi";
 
 export default function Header({ onOpenSidebar }) {
   const [showProfileInfo, setShowProfileInfo] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [serverUser, setServerUser] = useState(null); // اطلاعات کامل از API
-  const [clientUser, setClientUser] = useState(null); // اطلاعات از sessionStorage
   const profileRef = useRef(null);
   const router = useRouter();
 
-  // خواندن currentUser از sessionStorage هنگام اولین mount
-  useEffect(() => {
-    try {
-      const raw =
-        typeof window !== "undefined"
-          ? sessionStorage.getItem("currentUser")
-          : null;
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        setClientUser(parsed);
-      } else {
-        setClientUser(null);
-      }
-    } catch (e) {
-      console.error("Failed to parse currentUser from sessionStorage:", e);
-      setClientUser(null);
-    }
-  }, []);
+  const { data, isLoading, isError } = useListUsersQuery();
 
-  // اگر clientUser داشتیم، از API لیست کاربران رو بگیر و کاربر با همان _id رو پیدا کن
-  useEffect(() => {
-    let mounted = true;
-    const fetchUserFromApi = async () => {
-      if (!clientUser || !clientUser._id) return;
-      setLoading(true);
-      try {
-        // درخواست به endpoint اصلی
-        const res = await fetch("http://localhost:7000/api/users");
-        if (!res.ok) {
-          throw new Error(`خطا از سرور: ${res.status}`);
-        }
-        const data = await res.json();
+  const [user, setUser] = useState(null);
 
-        // فرض می‌کنیم data آرایه‌ای از کاربران است؛ سعی می‌کنیم بر اساس _id پیدا کنیم
-        let found = null;
-        if (Array.isArray(data)) {
-          found = data.find((u) => String(u._id) === String(clientUser._id));
-        } else if (data && Array.isArray(data.users)) {
-          // بعضی APIها داده‌ها را در { users: [...] } برمی‌گردانند
-          found = data.users.find(
-            (u) => String(u._id) === String(clientUser._id),
-          );
-        } else if (data && data._id) {
-          // شاید endpoint تک کاربر برگردونه
-          found = String(data._id) === String(clientUser._id) ? data : null;
-        }
-
-        // اگر پیدا نشد، تلاش کن با employeeCode هم پیدا کنی (فقط برای احتیاط)
-        if (!found && clientUser.employeeCode && Array.isArray(data)) {
-          found = data.find(
-            (u) => String(u.employeeCode) === String(clientUser.employeeCode),
-          );
-        }
-
-        if (mounted) {
-          if (found) {
-            setServerUser(found);
-          } else {
-            console.warn("User not found on API with _id:", clientUser._id);
-            setServerUser(null);
-          }
-        }
-      } catch (err) {
-        console.error("Failed to fetch users from API:", err);
-        if (mounted) setServerUser(null);
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    };
-
-    fetchUserFromApi();
-
-    return () => {
-      mounted = false;
-    };
-  }, [clientUser]);
-
-  // بستن منو هنگام کلیک بیرون
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (profileRef.current && !profileRef.current.contains(event.target)) {
@@ -120,7 +40,40 @@ export default function Header({ onOpenSidebar }) {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // هندلر خروج
+  useEffect(() => {
+    if (!data) return;
+
+    try {
+      const currentUserRaw = sessionStorage.getItem("currentUser");
+      if (!currentUserRaw) return;
+
+      const currentUser = JSON.parse(currentUserRaw);
+      const userId = currentUser.id || currentUser._id;
+
+      if (!userId) return;
+
+      const usersList = data?.data?.users || data?.users || data || [];
+
+      if (!Array.isArray(usersList) || usersList.length === 0) return;
+
+      const foundUser = usersList.find(
+        (u) => u.id === userId || u._id === userId,
+      );
+
+      if (foundUser) {
+        setUser(foundUser);
+      }
+    } catch (error) {
+      console.error("Error loading user:", error);
+    }
+  }, [data]);
+
+  const displayName = user?.name || "کاربر مهمان";
+  const displayRole = user?.role || "کاربر";
+  const isActive = user?.status === "ACTIVE";
+  const displayEmail = user?.email || "—";
+  const displayEmployeeCode = user?.employeeCode || "—";
+
   const handleLogout = async () => {
     const result = await Swal.fire({
       title: "خروج از حساب",
@@ -129,33 +82,16 @@ export default function Header({ onOpenSidebar }) {
       showCancelButton: true,
       confirmButtonText: "بله، خارج شو",
       cancelButtonText: "انصراف",
-      confirmButtonColor: "#50A2FF", // زرد
-      cancelButtonColor: "#374151", // خاکستری
+      confirmButtonColor: "#50A2FF",
+      cancelButtonColor: "#374151",
       reverseButtons: true,
     });
 
     if (result.isConfirmed) {
-      // پاک‌سازی کل session و local
-      try {
-        if (typeof window !== "undefined") {
-          sessionStorage.clear();
-          sessionStorage.clear();
-        }
-      } catch (e) {
-        console.error("Error clearing storage:", e);
-      }
-      // ریدایرکت امن به صفحه اصلی
+      sessionStorage.clear();
       router.replace("/");
     }
   };
-
-  // اطلاعاتی که نمایش داده می‌شود: اگر serverUser هست از آن استفاده کن، وگرنه از clientUser
-  const displayUser = serverUser || clientUser || {};
-  const displayName = displayUser.name || "کاربر مهمان";
-  const displayRole = displayUser.role || "—";
-  const displayEmail = displayUser.email || "—";
-  const profileImage = displayUser.profileImage || null;
-  const isActive = displayUser.status === "active" || true; // اگر سرور وضعیت نداد، فرض کن فعال
 
   return (
     <header className="flex items-center justify-between px-6 mb-3 py-4 bg-[#1a1d23]/50 backdrop-blur-md border border-gray-800 rounded-[2rem] sticky top-4 z-50 shadow-2xl transition-all duration-500 hover:border-blue-400/30">
@@ -200,7 +136,7 @@ export default function Header({ onOpenSidebar }) {
           >
             <div className="flex flex-col text-right hidden lg:flex">
               <span className="text-white font-black italic text-sm tracking-tight group-hover:text-blue-400 transition-colors">
-                {loading ? "در حال بارگذاری..." : displayName}
+                {displayName}
               </span>
               <span className="text-[9px] text-gray-500 uppercase font-black tracking-widest flex items-center gap-1 justify-end">
                 {displayRole}{" "}
@@ -210,17 +146,22 @@ export default function Header({ onOpenSidebar }) {
 
             <div className="relative">
               <div className="absolute inset-0 bg-blue-400 rounded-full blur-md opacity-0 group-hover:opacity-40 transition-opacity"></div>
-              {profileImage ? (
+              {user?.profileImage &&
+              user.profileImage !== "default-avatar.png" ? (
                 <Image
-                  src={`http://localhost:7000/uploads/${profileImage}`}
+                  src={
+                    user.profileImage.startsWith("http")
+                      ? user.profileImage
+                      : `http://localhost:5000/uploads${user.profileImage}`
+                  }
                   width={48}
                   height={48}
                   alt={displayName}
-                  className="rounded-full border-2 border-blue-400 relative z-10 grayscale-[50%] group-hover:grayscale-0 transition-all"
+                  className="rounded-full border-2 border-blue-400 relative z-10 grayscale-[50%] group-hover:grayscale-0 transition-all object-cover w-12 h-12"
                   unoptimized
                 />
               ) : (
-                <div className="w-12 h-12 rounded-full bg-gray-800 border-2 border-blue-400 flex items-center justify-center text-blue-400 font-black">
+                <div className="w-12 h-12 rounded-full bg-gray-800 border-2 border-blue-400 flex items-center justify-center text-blue-400 font-black text-xl">
                   {displayName.charAt(0)}
                 </div>
               )}
@@ -243,14 +184,16 @@ export default function Header({ onOpenSidebar }) {
 
           {/* دراپ‌دان منو */}
           {showProfileInfo && (
-            <div className="absolute left-0 lg:right-0 mt-4 bg-[#1a1d23] border border-gray-800 p-2 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] w-56 animate-in fade-in zoom-in duration-200 z-50">
+            <div className="absolute left-0 lg:right-0 mt-4 bg-[#1a1d23] border border-gray-800 p-2 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] w-64 animate-in fade-in zoom-in duration-200 z-50">
               <div className="p-3 border-b border-gray-800 mb-2">
                 <p className="text-gray-500 text-[9px] uppercase font-black tracking-widest mb-1">
                   وضعیت عملیاتی
                 </p>
                 <div className="flex items-center gap-2 text-sm">
                   <span
-                    className={`${isActive ? "text-green-400" : "text-gray-400"} font-bold uppercase italic`}
+                    className={`${
+                      isActive ? "text-green-400" : "text-gray-400"
+                    } font-bold uppercase italic`}
                   >
                     {isActive ? "فعال" : "غیرفعال"}
                   </span>
@@ -261,9 +204,19 @@ export default function Header({ onOpenSidebar }) {
               </div>
 
               <div className="space-y-1 text-right">
-                <button className="w-full flex items-center justify-end gap-3 p-3 text-gray-400 hover:bg-blue-400 hover:text-black rounded-xl transition-all text-sm font-bold italic">
-                  تنظیمات امنیتی <Settings size={16} />
-                </button>
+                <Link
+                  href="/teacher-dashboard/profile"
+                  className="w-full flex items-center justify-end gap-3 p-3 text-gray-400 hover:bg-blue-400 hover:text-black rounded-xl transition-all text-sm font-bold italic"
+                >
+                  مشاهده پروفایل <User size={16} />
+                </Link>
+
+                <Link
+                  href={`/teacher-dashboard/profile/${user?.id || user?._id}/edit`}
+                  className="w-full flex items-center justify-end gap-3 p-3 text-gray-400 hover:bg-blue-400 hover:text-black rounded-xl transition-all text-sm font-bold italic"
+                >
+                  ویرایش اطلاعات <Settings size={16} />
+                </Link>
 
                 <button
                   onClick={handleLogout}
@@ -284,7 +237,7 @@ export default function Header({ onOpenSidebar }) {
                     کد عضویت:
                     <span className="text-white text-[11px] font-bold">
                       {" "}
-                      {displayUser.employeeCode || "—"}
+                      {displayEmployeeCode}
                     </span>
                   </p>
                 </div>

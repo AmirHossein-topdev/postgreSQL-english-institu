@@ -58,22 +58,40 @@ export default function classPage() {
 
   // normalize و map کردن به آرایه inventory مورد استفاده در جدول
   const inventory = React.useMemo(() => {
-    const items = Array.isArray(classs)
-      ? classs
-      : Array.isArray(classs?.data)
-        ? classs.data
-        : [];
+    // ✅ اصلاح: بررسی دقیق ساختار داده
+    let items = [];
+
+    if (Array.isArray(classs)) {
+      items = classs;
+    } else if (classs?.data) {
+      if (Array.isArray(classs.data)) {
+        items = classs.data;
+      } else if (Array.isArray(classs.data?.classes)) {
+        items = classs.data.classes;
+      } else if (classs.data?.users) {
+        // اگر داده به صورت users برگشته
+        items = classs.data.users || [];
+      } else {
+        items = [];
+      }
+    } else {
+      items = [];
+    }
 
     return items.map((item) => ({
       id:
-        item._id?.toString() ||
         item.id ||
+        item._id?.toString() ||
         Math.random().toString(36).slice(2, 9),
       name: item.name || "—",
       level: item.level || "—",
       term: item.term || "—",
       teacherName: item.teacher?.name || item.teacherId?.name || "نامشخص",
-      studentsCount: item.studentIds?.length || item.students?.length || 0,
+      studentsCount:
+        item.enrollments?.length ||
+        item.studentIds?.length ||
+        item.students?.length ||
+        0,
       capacity: item.capacity || 0,
       schedule: item.schedule || "—",
       room: item.room || "—",
@@ -88,7 +106,7 @@ export default function classPage() {
         : "—",
       totalSessions: item.totalSessions || 0,
       description: item.description || "—",
-      createdBy: item.createdBy || "—",
+      createdBy: item.createdBy?.name || item.createdBy || "—",
       createdAt: item.createdAt
         ? new Date(item.createdAt).toLocaleDateString("fa-IR")
         : "—",
@@ -117,36 +135,55 @@ export default function classPage() {
     const total = filteredInventory.length;
     if (total === 0) return classStatusData;
 
-    const registering = filteredInventory.filter(
-      (c) => c.status === "در حال ثبت‌نام",
-    ).length;
-    const active = filteredInventory.filter((c) => c.status === "فعال").length;
-    const completed = filteredInventory.filter(
-      (c) => c.status === "تکمیل شده",
-    ).length;
-    const canceled = filteredInventory.filter(
-      (c) => c.status === "لغو شده",
-    ).length;
+    const statusMap = {
+      "در حال ثبت‌نام": 0,
+      فعال: 0,
+      "تکمیل شده": 0,
+      "لغو شده": 0,
+      UNDER_REGISTRATION: 0,
+      ACTIVE: 0,
+      COMPLETED: 0,
+      CANCELED: 0,
+    };
+
+    // نقشه وضعیت‌های انگلیسی به فارسی
+    const statusMapToPersian = {
+      UNDER_REGISTRATION: "در حال ثبت‌نام",
+      ACTIVE: "فعال",
+      COMPLETED: "تکمیل شده",
+      CANCELED: "لغو شده",
+    };
+
+    filteredInventory.forEach((item) => {
+      let status = item.status;
+      // اگر وضعیت انگلیسی است، به فارسی تبدیل کن
+      if (statusMapToPersian[status]) {
+        status = statusMapToPersian[status];
+      }
+      if (statusMap[status] !== undefined) {
+        statusMap[status]++;
+      }
+    });
 
     return [
       {
         name: "در حال ثبت‌نام",
-        value: Math.round((registering / total) * 100) || 0,
+        value: Math.round((statusMap["در حال ثبت‌نام"] / total) * 100) || 0,
         color: "#3b82f6",
       },
       {
         name: "فعال",
-        value: Math.round((active / total) * 100) || 0,
+        value: Math.round((statusMap["فعال"] / total) * 100) || 0,
         color: "#10b981",
       },
       {
         name: "تکمیل شده",
-        value: Math.round((completed / total) * 100) || 0,
+        value: Math.round((statusMap["تکمیل شده"] / total) * 100) || 0,
         color: "#8b5cf6",
       },
       {
         name: "لغو شده",
-        value: Math.round((canceled / total) * 100) || 0,
+        value: Math.round((statusMap["لغو شده"] / total) * 100) || 0,
         color: "#ef4444",
       },
     ];
@@ -154,17 +191,24 @@ export default function classPage() {
 
   const stats = {
     total: filteredInventory.length,
-    active: filteredInventory.filter((c) => c.status === "فعال").length,
-    registering: filteredInventory.filter((c) => c.status === "در حال ثبت‌نام")
-      .length,
-    completed: filteredInventory.filter((c) => c.status === "تکمیل شده").length,
-    canceled: filteredInventory.filter((c) => c.status === "لغو شده").length,
+    active: filteredInventory.filter(
+      (c) => c.status === "فعال" || c.status === "ACTIVE",
+    ).length,
+    registering: filteredInventory.filter(
+      (c) => c.status === "در حال ثبت‌نام" || c.status === "UNDER_REGISTRATION",
+    ).length,
+    completed: filteredInventory.filter(
+      (c) => c.status === "تکمیل شده" || c.status === "COMPLETED",
+    ).length,
+    canceled: filteredInventory.filter(
+      (c) => c.status === "لغو شده" || c.status === "CANCELED",
+    ).length,
     totalStudents: filteredInventory.reduce(
-      (sum, c) => sum + c.studentsCount,
+      (sum, c) => sum + (c.studentsCount || 0),
       0,
     ),
     totalTuition: filteredInventory.reduce(
-      (sum, c) => sum + (c.tuition || 0),
+      (sum, c) => sum + (parseFloat(c.tuition) || 0),
       0,
     ),
   };
@@ -204,7 +248,7 @@ export default function classPage() {
           timer: 1500,
           showConfirmButton: false,
         });
-        refetch(); // رفرش لیست کلاس‌ها
+        refetch();
       } else {
         throw new Error(data.message);
       }
@@ -222,7 +266,17 @@ export default function classPage() {
   };
 
   const getStatusBadge = (status) => {
-    switch (status) {
+    // تبدیل وضعیت انگلیسی به فارسی برای نمایش
+    const statusMap = {
+      UNDER_REGISTRATION: "در حال ثبت‌نام",
+      ACTIVE: "فعال",
+      COMPLETED: "تکمیل شده",
+      CANCELED: "لغو شده",
+    };
+
+    const displayStatus = statusMap[status] || status;
+
+    switch (displayStatus) {
       case "فعال":
         return "bg-green-500/10 text-green-500 border-green-500/20";
       case "در حال ثبت‌نام":
@@ -234,6 +288,57 @@ export default function classPage() {
       default:
         return "bg-gray-500/10 text-gray-500 border-gray-500/20";
     }
+  };
+
+  const getStatusIcon = (status) => {
+    const statusMap = {
+      UNDER_REGISTRATION: "در حال ثبت‌نام",
+      ACTIVE: "فعال",
+      COMPLETED: "تکمیل شده",
+      CANCELED: "لغو شده",
+    };
+    const displayStatus = statusMap[status] || status;
+
+    switch (displayStatus) {
+      case "فعال":
+        return <CheckCircle size={10} />;
+      case "در حال ثبت‌نام":
+        return <Users size={10} />;
+      case "تکمیل شده":
+        return <GraduationCap size={10} />;
+      case "لغو شده":
+        return <XCircle size={10} />;
+      default:
+        return null;
+    }
+  };
+
+  const getStatusDisplay = (status) => {
+    const statusMap = {
+      UNDER_REGISTRATION: "در حال ثبت‌نام",
+      ACTIVE: "فعال",
+      COMPLETED: "تکمیل شده",
+      CANCELED: "لغو شده",
+    };
+    return statusMap[status] || status;
+  };
+
+  const formatNumber = (num) => {
+    if (!num) return "۰";
+    const n = Number(num);
+    if (n >= 1_000_000_000_000) {
+      return (n / 1_000_000_000_000).toFixed(1) + " تریلیون";
+    }
+    if (n >= 1_000_000_000) {
+      return (n / 1_000_000_000).toFixed(1) + " میلیارد";
+    }
+    if (n >= 1_000_000) {
+      return (n / 1_000_000).toFixed(1) + " میلیون";
+    }
+    if (n >= 1_000) {
+      return (n / 1_000).toFixed(1) + " هزار";
+    }
+    return n.toLocaleString();
   };
 
   return (
@@ -388,8 +493,8 @@ export default function classPage() {
             <p className="text-gray-500 text-[10px] font-bold uppercase">
               شهریه کل
             </p>
-            <p className="text-2xl font-black text-green-400 mt-1">
-              {stats.totalTuition.toLocaleString()} ت
+            <p className="text-lg font-black text-green-400 mt-1">
+              {formatNumber(stats.totalTuition)} ت
             </p>
           </div>
         </div>
@@ -533,7 +638,7 @@ export default function classPage() {
                             <div
                               className="h-full rounded-full bg-gradient-to-r from-green-500 to-blue-500"
                               style={{
-                                width: `${(item.studentsCount / item.capacity) * 100}%`,
+                                width: `${item.capacity > 0 ? (item.studentsCount / item.capacity) * 100 : 0}%`,
                               }}
                             ></div>
                           </div>
@@ -548,15 +653,8 @@ export default function classPage() {
                         <span
                           className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-tighter border ${getStatusBadge(item.status)}`}
                         >
-                          {item.status === "فعال" && <CheckCircle size={10} />}
-                          {item.status === "در حال ثبت‌نام" && (
-                            <Users size={10} />
-                          )}
-                          {item.status === "تکمیل شده" && (
-                            <GraduationCap size={10} />
-                          )}
-                          {item.status === "لغو شده" && <XCircle size={10} />}
-                          {item.status}
+                          {getStatusIcon(item.status)}
+                          {getStatusDisplay(item.status)}
                         </span>
                       </td>
 

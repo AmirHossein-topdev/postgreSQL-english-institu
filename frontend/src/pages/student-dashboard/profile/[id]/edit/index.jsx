@@ -1,11 +1,11 @@
-// frontend/src/pages/teacher-dashboard/profile/edit/index.jsx
+// frontend/src/pages/student-dashboard/profile/edit/index.jsx
 
 "use client";
 
 import React, { useEffect, useState } from "react";
 import Swal from "sweetalert2";
 import Link from "next/link";
-import DashboardLayout from "../../layout";
+import DashboardLayout from "../../../layout";
 import { useRouter } from "next/router";
 import {
   ArrowRight,
@@ -29,7 +29,7 @@ import {
 import {
   useListUsersQuery,
   useUpdateUserMutation,
-} from "../../../../redux/features/userApi";
+} from "../../../../../redux/features/userApi";
 
 export default function EditMyProfilePage() {
   const router = useRouter();
@@ -66,7 +66,7 @@ export default function EditMyProfilePage() {
     const currentUserRaw = sessionStorage.getItem("currentUser");
     if (currentUserRaw) {
       const currentUser = JSON.parse(currentUserRaw);
-      setCurrentUserId(currentUser._id);
+      setCurrentUserId(currentUser.id || currentUser._id);
     }
   }, []);
 
@@ -74,12 +74,20 @@ export default function EditMyProfilePage() {
   useEffect(() => {
     if (!data || !currentUserId) return;
 
+    // ✅ سازگاری با ساختار Prisma: { success: true, data: { users: [], pagination: {} } }
+    const usersList = data?.data?.users || data?.users || data || [];
+
     // پیدا کردن کاربر جاری در لیست کاربران
-    const usersList = Array.isArray(data) ? data : data?.users || [];
-    const currentUser = usersList.find((u) => u._id === currentUserId);
+    const currentUser = usersList.find(
+      (u) => u.id === currentUserId || u._id === currentUserId,
+    );
 
     if (currentUser) {
       setUser(currentUser);
+
+      // ✅ دریافت level از studentProfile
+      const userLevel =
+        currentUser.studentProfile?.level || currentUser.level || "";
 
       setFormData({
         name: currentUser.name ?? "",
@@ -89,19 +97,27 @@ export default function EditMyProfilePage() {
         email: currentUser.email ?? "",
         phone: currentUser.phone ?? "",
         address: currentUser.address ?? "",
-        specialization: currentUser.specialization ?? "",
-        level: currentUser.level ?? "",
-        salary: currentUser.salary?.toString() ?? "",
+        specialization:
+          currentUser.studentProfile?.specialization ||
+          currentUser.specialization ||
+          "",
+        level: userLevel,
+        salary:
+          currentUser.studentProfile?.salary?.toString() ||
+          currentUser.salary?.toString() ||
+          "",
         birthday: currentUser.birthday ?? "",
-        hireDate: currentUser.hireDate ?? "",
+        hireDate:
+          currentUser.studentProfile?.hireDate || currentUser.hireDate || "",
         profileImage: null,
       });
 
       // تنظیم پیش‌نمایش عکس فعلی
-      if (currentUser.profileImage) {
-        setPreviewOld(
-          `http://localhost:7000/uploads/${currentUser.profileImage}`,
-        );
+      if (
+        currentUser.profileImage &&
+        currentUser.profileImage !== "default-avatar.png"
+      ) {
+        setPreviewOld(`http://localhost:5000${currentUser.profileImage}`);
       } else {
         setPreviewOld("");
       }
@@ -161,7 +177,7 @@ export default function EditMyProfilePage() {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (!user?._id) {
+    if (!user?.id && !user?._id) {
       Swal.fire({
         icon: "error",
         title: "خطا!",
@@ -174,6 +190,9 @@ export default function EditMyProfilePage() {
     }
 
     try {
+      const userId = user.id || user._id;
+
+      // ✅ استفاده از FormData برای آپلود فایل
       const form = new FormData();
 
       form.append("name", formData.name);
@@ -195,22 +214,20 @@ export default function EditMyProfilePage() {
       }
 
       const result = await updateUser({
-        id: user._id,
+        id: userId,
         formData: form,
       }).unwrap();
 
-      // به‌روزرسانی sessionStorage
+      // ✅ به‌روزرسانی sessionStorage با اطلاعات جدید
       const updatedUser = {
-        ...user,
+        id: userId,
         name: formData.name,
         email: formData.email,
         phone: formData.phone,
         address: formData.address,
-        specialization: formData.specialization,
-        level: formData.level,
-        salary: formData.salary,
-        birthday: formData.birthday,
-        hireDate: formData.hireDate,
+        role: formData.role,
+        employeeCode: formData.employeeCode || user.employeeCode,
+        profileImage: result.data?.profileImage || user.profileImage,
       };
 
       sessionStorage.setItem("currentUser", JSON.stringify(updatedUser));
@@ -269,7 +286,7 @@ export default function EditMyProfilePage() {
         {/* Header */}
         <div className="flex items-center gap-4 mb-10 pb-6 border-b border-blue-500/20">
           <Link
-            href="/teacher-dashboard/profile"
+            href="/student-dashboard/profile"
             className="p-3 bg-[#1a1f2e] text-blue-400 hover:bg-blue-400 hover:text-black transition-all rounded-xl border border-blue-500/20"
           >
             <ArrowRight size={24} />
@@ -344,7 +361,7 @@ export default function EditMyProfilePage() {
               <Label icon={UserPlus} text="نقش کاربری" />
               <input
                 type="text"
-                value={formData.role === "Teacher" ? "استاد" : formData.role}
+                value={formData.role === "student" ? "استاد" : formData.role}
                 disabled
                 className="w-full bg-[#0F1420] border border-gray-700 text-gray-500 rounded-2xl p-4 cursor-not-allowed"
               />
@@ -453,7 +470,7 @@ export default function EditMyProfilePage() {
               {previewNew ? (
                 <div className="flex items-center gap-3 bg-[#1a1f2e] p-2 rounded-2xl border border-blue-500/30">
                   <img
-                    src={previewNew}
+                    src={previewNew.replace("/images/", "/uploads/images/")}
                     alt="Preview"
                     className="w-16 h-16 object-cover rounded-xl border-2 border-blue-400"
                   />
@@ -464,7 +481,7 @@ export default function EditMyProfilePage() {
               ) : previewOld ? (
                 <div className="flex items-center gap-3 bg-[#1a1f2e] p-2 rounded-2xl border border-blue-500/30">
                   <img
-                    src={previewOld}
+                    src={previewOld.replace("/images/", "/uploads/images/")}
                     alt="Current"
                     className="w-16 h-16 object-cover rounded-xl border border-blue-500/30"
                   />

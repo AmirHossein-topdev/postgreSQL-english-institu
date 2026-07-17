@@ -12,13 +12,12 @@ class ClassController {
         name: req.body.name,
         level: req.body.level,
         teacherId: req.body.teacherId,
-        studentIds: req.body.studentIds || [],
         term: req.body.term,
         tuition: req.body.tuition,
         schedule: req.body.schedule,
         room: req.body.room,
-        status: req.body.status || "در حال ثبت‌نام",
-        createdBy: req.user.id, // از توکن احراز هویت گرفته میشه
+        status: req.body.status || "UNDER_REGISTRATION",
+        createdById: req.user.id, // از توکن احراز هویت گرفته میشه
         startDate: req.body.startDate,
         endDate: req.body.endDate,
         capacity: req.body.capacity || 10,
@@ -341,14 +340,18 @@ class ClassController {
   async checkClassCapacity(req, res) {
     try {
       const classData = await ClassService.getClassById(req.params.id);
-      const hasCapacity = classData.hasCapacity();
-      const remainingSeats = classData.getRemainingSeats();
+      const currentStudents = await ClassService.getClassStudentsCount(
+        req.params.id,
+      );
+      const remainingSeats = classData.capacity - currentStudents;
+      const hasCapacity = remainingSeats > 0;
+
       res.json({
         success: true,
         data: {
           hasCapacity,
           remainingSeats,
-          currentStudents: classData.studentIds.length,
+          currentStudents,
           capacity: classData.capacity,
         },
       });

@@ -1,6 +1,6 @@
 // backend/services/class.service.js
-const Class = require("../model/Class");
-const User = require("../model/User");
+const { PrismaClient } = require("@prisma/client");
+const prisma = new PrismaClient();
 
 class ClassService {
   // =====================================
@@ -12,57 +12,100 @@ class ClassService {
         name,
         level,
         teacherId,
-        studentIds,
         term,
         tuition,
         schedule,
         room,
         status,
-        createdBy,
+        createdById,
         startDate,
         endDate,
         capacity,
         totalSessions,
         description,
+        studentIds,
       } = data;
 
       // بررسی وجود استاد
       if (teacherId) {
-        const teacher = await User.findOne({ _id: teacherId, role: "Teacher" });
-        if (!teacher) throw new Error("Teacher not found or invalid role");
+        const teacher = await prisma.user.findFirst({
+          where: {
+            id: teacherId,
+            role: "Teacher",
+            status: "ACTIVE",
+          },
+        });
+        if (!teacher) throw new Error("Teacher not found or not active");
       }
 
       // بررسی وجود دانشجوها
       if (studentIds && studentIds.length > 0) {
-        const students = await User.find({
-          _id: { $in: studentIds },
-          role: "Student",
+        const students = await prisma.user.findMany({
+          where: {
+            id: { in: studentIds },
+            role: "Student",
+            status: "ACTIVE",
+          },
         });
         if (students.length !== studentIds.length) {
-          throw new Error("Some students not found or invalid role");
+          throw new Error("Some students not found or inactive");
         }
       }
 
-      const newClass = new Class({
-        name,
-        level: level || "A1",
-        teacherId,
-        studentIds: studentIds || [],
-        term,
-        tuition: tuition || 0,
-        schedule,
-        room,
-        status: status || "در حال ثبت‌نام",
-        createdBy,
-        startDate,
-        endDate,
-        capacity: capacity || 10,
-        totalSessions: totalSessions || 12,
-        description,
-        isConfirmed: false,
+      // ایجاد کلاس جدید
+      const newClass = await prisma.class.create({
+        data: {
+          name,
+          level: level || "A1",
+          teacherId: teacherId || null,
+          term,
+          tuition: tuition ? parseFloat(tuition) : 0,
+          schedule: schedule || "",
+          room: room || "",
+          status: status || "UNDER_REGISTRATION",
+          createdById: createdById,
+          startDate: startDate ? new Date(startDate) : null,
+          endDate: endDate ? new Date(endDate) : null,
+          capacity: capacity || 10,
+          totalSessions: totalSessions || 12,
+          description: description || "",
+          isConfirmed: false,
+        },
+        include: {
+          teacher: true,
+          enrollments: {
+            include: {
+              user: true,
+            },
+          },
+        },
       });
 
-      await newClass.save();
+      // افزودن دانشجویان به Enrollment
+      if (studentIds && studentIds.length > 0) {
+        await prisma.enrollment.createMany({
+          data: studentIds.map((studentId) => ({
+            userId: studentId,
+            classId: newClass.id,
+            status: "IN_PROGRESS",
+          })),
+          skipDuplicates: true,
+        });
+
+        // دریافت مجدد کلاس با اطلاعات به‌روز
+        return await prisma.class.findUnique({
+          where: { id: newClass.id },
+          include: {
+            teacher: true,
+            enrollments: {
+              include: {
+                user: true,
+              },
+            },
+          },
+        });
+      }
+
       return newClass;
     } catch (err) {
       throw err;
@@ -87,35 +130,62 @@ class ClassService {
         capacity,
         totalSessions,
         description,
+        status,
+        isConfirmed,
       } = data;
 
-      const existingClass = await Class.findById(id);
+      const existingClass = await prisma.class.findUnique({
+        where: { id },
+      });
       if (!existingClass) throw new Error("Class not found");
 
       // بررسی وجود استاد
       if (teacherId) {
-        const teacher = await User.findOne({ _id: teacherId, role: "Teacher" });
-        if (!teacher) throw new Error("Teacher not found or invalid role");
+        const teacher = await prisma.user.findFirst({
+          where: {
+            id: teacherId,
+            role: "Teacher",
+            status: "ACTIVE",
+          },
+        });
+        if (!teacher) throw new Error("Teacher not found or not active");
       }
 
-      const updatedClass = await Class.findByIdAndUpdate(
-        id,
-        {
-          name,
-          level,
-          teacherId,
-          term,
-          tuition,
-          schedule,
-          room,
-          startDate,
-          endDate,
-          capacity,
-          totalSessions,
-          description,
-        },
-        { new: true, runValidators: true },
+      // آماده‌سازی داده‌های به‌روزرسانی
+      const updateData = {
+        name,
+        level,
+        teacherId,
+        term,
+        tuition: tuition !== undefined ? parseFloat(tuition) : undefined,
+        schedule,
+        room,
+        status,
+        startDate: startDate ? new Date(startDate) : null,
+        endDate: endDate ? new Date(endDate) : null,
+        capacity,
+        totalSessions,
+        description,
+        isConfirmed: isConfirmed !== undefined ? isConfirmed : undefined,
+      };
+
+      // حذف فیلدهای undefined
+      Object.keys(updateData).forEach(
+        (key) => updateData[key] === undefined && delete updateData[key],
       );
+
+      const updatedClass = await prisma.class.update({
+        where: { id },
+        data: updateData,
+        include: {
+          teacher: true,
+          enrollments: {
+            include: {
+              user: true,
+            },
+          },
+        },
+      });
 
       if (!updatedClass) throw new Error("Class not found");
       return updatedClass;
@@ -129,13 +199,31 @@ class ClassService {
   // =====================================
   async getClassById(id) {
     try {
-      const classData = await Class.findById(id)
-        .populate("teacherId", "name employeeCode phone email specialization")
-        .populate(
-          "studentIds",
-          "name employeeCode phone email level emergencyPhone",
-        )
-        .populate("createdBy", "name employeeCode");
+      const classData = await prisma.class.findUnique({
+        where: { id },
+        include: {
+          teacher: {
+            include: {
+              teacherProfile: true,
+            },
+          },
+          enrollments: {
+            include: {
+              user: {
+                include: {
+                  studentProfile: true,
+                },
+              },
+            },
+          },
+          createdBy: true,
+          sessions: {
+            orderBy: {
+              sessionNumber: "asc",
+            },
+          },
+        },
+      });
 
       if (!classData) throw new Error("Class not found");
       return classData;
@@ -149,7 +237,9 @@ class ClassService {
   // =====================================
   async deleteClass(id) {
     try {
-      const deletedClass = await Class.findByIdAndDelete(id);
+      const deletedClass = await prisma.class.delete({
+        where: { id },
+      });
       if (!deletedClass) throw new Error("Class not found");
       return deletedClass;
     } catch (err) {
@@ -162,27 +252,52 @@ class ClassService {
   // =====================================
   async addStudentToClass(classId, studentId) {
     try {
-      const classData = await Class.findById(classId);
+      const classData = await prisma.class.findUnique({
+        where: { id: classId },
+        include: {
+          enrollments: true,
+        },
+      });
       if (!classData) throw new Error("Class not found");
 
       // بررسی وجود دانشجو
-      const student = await User.findOne({ _id: studentId, role: "Student" });
-      if (!student) throw new Error("Student not found or invalid role");
+      const student = await prisma.user.findFirst({
+        where: {
+          id: studentId,
+          role: "Student",
+          status: "ACTIVE",
+        },
+      });
+      if (!student) throw new Error("Student not found or inactive");
 
       // بررسی ظرفیت
-      if (!classData.hasCapacity()) {
+      if (classData.enrollments.length >= classData.capacity) {
         throw new Error("Class capacity is full");
       }
 
       // بررسی تکراری نبودن
-      if (classData.studentIds.includes(studentId)) {
+      const existing = await prisma.enrollment.findUnique({
+        where: {
+          userId_classId: {
+            userId: studentId,
+            classId: classId,
+          },
+        },
+      });
+      if (existing) {
         throw new Error("Student already enrolled in this class");
       }
 
-      classData.studentIds.push(studentId);
-      await classData.save();
+      // افزودن دانشجو
+      await prisma.enrollment.create({
+        data: {
+          userId: studentId,
+          classId: classId,
+          status: "IN_PROGRESS",
+        },
+      });
 
-      return classData;
+      return await this.getClassById(classId);
     } catch (err) {
       throw err;
     }
@@ -193,15 +308,18 @@ class ClassService {
   // =====================================
   async removeStudentFromClass(classId, studentId) {
     try {
-      const classData = await Class.findById(classId);
-      if (!classData) throw new Error("Class not found");
+      const result = await prisma.enrollment.deleteMany({
+        where: {
+          classId: classId,
+          userId: studentId,
+        },
+      });
 
-      classData.studentIds = classData.studentIds.filter(
-        (id) => id.toString() !== studentId.toString(),
-      );
-      await classData.save();
+      if (result.count === 0) {
+        throw new Error("Student not found in this class");
+      }
 
-      return classData;
+      return await this.getClassById(classId);
     } catch (err) {
       throw err;
     }
@@ -212,38 +330,61 @@ class ClassService {
   // =====================================
   async addMultipleStudentsToClass(classId, studentIds) {
     try {
-      const classData = await Class.findById(classId);
-      if (!classData) throw new Error("Class not found");
-
       if (!Array.isArray(studentIds) || studentIds.length === 0) {
         throw new Error("Please provide an array of student IDs");
       }
 
+      const classData = await prisma.class.findUnique({
+        where: { id: classId },
+        include: {
+          enrollments: true,
+        },
+      });
+      if (!classData) throw new Error("Class not found");
+
       // بررسی وجود دانشجوها
-      const students = await User.find({
-        _id: { $in: studentIds },
-        role: "Student",
+      const students = await prisma.user.findMany({
+        where: {
+          id: { in: studentIds },
+          role: "Student",
+          status: "ACTIVE",
+        },
       });
       if (students.length !== studentIds.length) {
-        throw new Error("Some students not found or invalid role");
+        throw new Error("Some students not found or inactive");
       }
 
       // بررسی ظرفیت
+      const existingEnrollments = await prisma.enrollment.findMany({
+        where: {
+          classId: classId,
+          userId: { in: studentIds },
+        },
+      });
+
+      const existingIds = existingEnrollments.map((e) => e.userId);
+      const newStudents = studentIds.filter((id) => !existingIds.includes(id));
+
       if (
-        classData.studentIds.length + studentIds.length >
+        classData.enrollments.length + newStudents.length >
         classData.capacity
       ) {
         throw new Error("Adding these students would exceed class capacity");
       }
 
-      // افزودن دانشجوهای جدید (بدون تکراری)
-      const newStudents = studentIds.filter(
-        (id) => !classData.studentIds.includes(id),
-      );
-      classData.studentIds.push(...newStudents);
-      await classData.save();
+      // افزودن دانشجویان جدید
+      if (newStudents.length > 0) {
+        await prisma.enrollment.createMany({
+          data: newStudents.map((studentId) => ({
+            userId: studentId,
+            classId: classId,
+            status: "IN_PROGRESS",
+          })),
+          skipDuplicates: true,
+        });
+      }
 
-      return classData;
+      return await this.getClassById(classId);
     } catch (err) {
       throw err;
     }
@@ -254,11 +395,25 @@ class ClassService {
   // =====================================
   async confirmClass(classId, adminId) {
     try {
-      const classData = await Class.findById(classId);
-      if (!classData) throw new Error("Class not found");
+      const updatedClass = await prisma.class.update({
+        where: { id: classId },
+        data: {
+          isConfirmed: true,
+          confirmedAt: new Date(),
+          status: "ACTIVE",
+        },
+        include: {
+          teacher: true,
+          enrollments: {
+            include: {
+              user: true,
+            },
+          },
+        },
+      });
 
-      await classData.confirm(adminId);
-      return classData;
+      if (!updatedClass) throw new Error("Class not found");
+      return updatedClass;
     } catch (err) {
       throw err;
     }
@@ -269,11 +424,24 @@ class ClassService {
   // =====================================
   async cancelClass(classId) {
     try {
-      const classData = await Class.findById(classId);
-      if (!classData) throw new Error("Class not found");
+      const updatedClass = await prisma.class.update({
+        where: { id: classId },
+        data: {
+          status: "CANCELED",
+          isConfirmed: false,
+        },
+        include: {
+          teacher: true,
+          enrollments: {
+            include: {
+              user: true,
+            },
+          },
+        },
+      });
 
-      await classData.cancel();
-      return classData;
+      if (!updatedClass) throw new Error("Class not found");
+      return updatedClass;
     } catch (err) {
       throw err;
     }
@@ -284,11 +452,23 @@ class ClassService {
   // =====================================
   async completeClass(classId) {
     try {
-      const classData = await Class.findById(classId);
-      if (!classData) throw new Error("Class not found");
+      const updatedClass = await prisma.class.update({
+        where: { id: classId },
+        data: {
+          status: "COMPLETED",
+        },
+        include: {
+          teacher: true,
+          enrollments: {
+            include: {
+              user: true,
+            },
+          },
+        },
+      });
 
-      await classData.complete();
-      return classData;
+      if (!updatedClass) throw new Error("Class not found");
+      return updatedClass;
     } catch (err) {
       throw err;
     }
@@ -299,19 +479,31 @@ class ClassService {
   // =====================================
   async changeClassStatus(classId, status) {
     try {
-      const validStatuses = ["در حال ثبت‌نام", "فعال", "تکمیل شده", "لغو شده"];
+      const validStatuses = [
+        "UNDER_REGISTRATION",
+        "ACTIVE",
+        "COMPLETED",
+        "CANCELED",
+      ];
       if (!validStatuses.includes(status)) {
         throw new Error("Invalid status");
       }
 
-      const classData = await Class.findByIdAndUpdate(
-        classId,
-        { status },
-        { new: true },
-      );
-      if (!classData) throw new Error("Class not found");
+      const updatedClass = await prisma.class.update({
+        where: { id: classId },
+        data: { status },
+        include: {
+          teacher: true,
+          enrollments: {
+            include: {
+              user: true,
+            },
+          },
+        },
+      });
 
-      return classData;
+      if (!updatedClass) throw new Error("Class not found");
+      return updatedClass;
     } catch (err) {
       throw err;
     }
@@ -322,9 +514,35 @@ class ClassService {
   // =====================================
   async listActiveClasses() {
     try {
-      const classes = await Class.findActiveClasses()
-        .populate("teacherId", "name employeeCode")
-        .populate("studentIds", "name employeeCode");
+      const classes = await prisma.class.findMany({
+        where: {
+          status: "ACTIVE",
+          isConfirmed: true,
+        },
+        include: {
+          teacher: {
+            select: {
+              id: true,
+              name: true,
+              employeeCode: true,
+            },
+          },
+          enrollments: {
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  name: true,
+                  employeeCode: true,
+                },
+              },
+            },
+          },
+        },
+        orderBy: {
+          startDate: "asc",
+        },
+      });
       return classes;
     } catch (err) {
       throw err;
@@ -336,9 +554,41 @@ class ClassService {
   // =====================================
   async listUnconfirmedClasses() {
     try {
-      const classes = await Class.findUnconfirmedClasses()
-        .populate("teacherId", "name employeeCode")
-        .populate("createdBy", "name employeeCode");
+      const classes = await prisma.class.findMany({
+        where: {
+          isConfirmed: false,
+        },
+        include: {
+          teacher: {
+            select: {
+              id: true,
+              name: true,
+              employeeCode: true,
+            },
+          },
+          createdBy: {
+            select: {
+              id: true,
+              name: true,
+              employeeCode: true,
+            },
+          },
+          enrollments: {
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  name: true,
+                  employeeCode: true,
+                },
+              },
+            },
+          },
+        },
+        orderBy: {
+          createdAt: "desc",
+        },
+      });
       return classes;
     } catch (err) {
       throw err;
@@ -350,13 +600,35 @@ class ClassService {
   // =====================================
   async getClassesByTeacher(teacherId) {
     try {
-      const teacher = await User.findOne({ _id: teacherId, role: "Teacher" });
+      const teacher = await prisma.user.findFirst({
+        where: {
+          id: teacherId,
+          role: "Teacher",
+        },
+      });
       if (!teacher) throw new Error("Teacher not found");
 
-      const classes = await Class.findByTeacher(teacherId).populate(
-        "studentIds",
-        "name employeeCode",
-      );
+      const classes = await prisma.class.findMany({
+        where: {
+          teacherId: teacherId,
+        },
+        include: {
+          enrollments: {
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  name: true,
+                  employeeCode: true,
+                },
+              },
+            },
+          },
+        },
+        orderBy: {
+          startDate: "desc",
+        },
+      });
       return classes;
     } catch (err) {
       throw err;
@@ -368,14 +640,48 @@ class ClassService {
   // =====================================
   async getClassesByStudent(studentId) {
     try {
-      const student = await User.findOne({ _id: studentId, role: "Student" });
+      const student = await prisma.user.findFirst({
+        where: {
+          id: studentId,
+          role: "Student",
+        },
+      });
       if (!student) throw new Error("Student not found");
 
-      const classes = await Class.findByStudent(studentId).populate(
-        "teacherId",
-        "name employeeCode",
-      );
-      return classes;
+      const enrollments = await prisma.enrollment.findMany({
+        where: {
+          userId: studentId,
+        },
+        include: {
+          class: {
+            include: {
+              teacher: {
+                select: {
+                  id: true,
+                  name: true,
+                  employeeCode: true,
+                },
+              },
+              enrollments: {
+                include: {
+                  user: {
+                    select: {
+                      id: true,
+                      name: true,
+                      employeeCode: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        orderBy: {
+          enrollDate: "desc",
+        },
+      });
+
+      return enrollments.map((e) => e.class);
     } catch (err) {
       throw err;
     }
@@ -386,9 +692,34 @@ class ClassService {
   // =====================================
   async getClassesByTerm(termName) {
     try {
-      const classes = await Class.findByTerm(termName)
-        .populate("teacherId", "name employeeCode")
-        .populate("studentIds", "name employeeCode");
+      const classes = await prisma.class.findMany({
+        where: {
+          term: termName,
+        },
+        include: {
+          teacher: {
+            select: {
+              id: true,
+              name: true,
+              employeeCode: true,
+            },
+          },
+          enrollments: {
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  name: true,
+                  employeeCode: true,
+                },
+              },
+            },
+          },
+        },
+        orderBy: {
+          startDate: "asc",
+        },
+      });
       return classes;
     } catch (err) {
       throw err;
@@ -405,9 +736,34 @@ class ClassService {
         throw new Error("Invalid level");
       }
 
-      const classes = await Class.findByLevel(level)
-        .populate("teacherId", "name employeeCode")
-        .populate("studentIds", "name employeeCode");
+      const classes = await prisma.class.findMany({
+        where: {
+          level: level,
+        },
+        include: {
+          teacher: {
+            select: {
+              id: true,
+              name: true,
+              employeeCode: true,
+            },
+          },
+          enrollments: {
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  name: true,
+                  employeeCode: true,
+                },
+              },
+            },
+          },
+        },
+        orderBy: {
+          startDate: "asc",
+        },
+      });
       return classes;
     } catch (err) {
       throw err;
@@ -424,24 +780,74 @@ class ClassService {
     level,
     term,
     isConfirmed,
+    search,
+    teacherId,
   }) {
     try {
-      const query = {};
-      if (status) query.status = status;
-      if (level) query.level = level;
-      if (term) query.term = term;
-      if (isConfirmed !== undefined) query.isConfirmed = isConfirmed;
+      const skip = (page - 1) * limit;
 
-      const classes = await Class.find(query)
-        .populate("teacherId", "name employeeCode")
-        .populate("studentIds", "name employeeCode")
-        .skip((page - 1) * limit)
-        .limit(limit)
-        .sort({ createdAt: -1 });
+      const where = {};
+      if (status) where.status = status;
+      if (level) where.level = level;
+      if (term) where.term = term;
+      if (isConfirmed !== undefined) where.isConfirmed = isConfirmed;
+      if (teacherId) where.teacherId = teacherId;
 
-      const total = await Class.countDocuments(query);
+      if (search) {
+        where.OR = [
+          { name: { contains: search, mode: "insensitive" } },
+          { term: { contains: search, mode: "insensitive" } },
+          { description: { contains: search, mode: "insensitive" } },
+          { room: { contains: search, mode: "insensitive" } },
+        ];
+      }
 
-      return { classes, total, page, limit };
+      const [classes, total] = await Promise.all([
+        prisma.class.findMany({
+          where,
+          include: {
+            teacher: {
+              select: {
+                id: true,
+                name: true,
+                employeeCode: true,
+                email: true,
+                phone: true,
+              },
+            },
+            enrollments: {
+              include: {
+                user: {
+                  select: {
+                    id: true,
+                    name: true,
+                    employeeCode: true,
+                  },
+                },
+              },
+            },
+            _count: {
+              select: {
+                enrollments: true,
+              },
+            },
+          },
+          skip,
+          take: limit,
+          orderBy: {
+            createdAt: "desc",
+          },
+        }),
+        prisma.class.count({ where }),
+      ]);
+
+      return {
+        classes,
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      };
     } catch (err) {
       throw err;
     }
@@ -452,29 +858,49 @@ class ClassService {
   // =====================================
   async getClassStats() {
     try {
-      const totalClasses = await Class.countDocuments();
-      const activeClasses = await Class.countDocuments({
-        status: "فعال",
-        isConfirmed: true,
-      });
-      const pendingClasses = await Class.countDocuments({ isConfirmed: false });
-      const completedClasses = await Class.countDocuments({
-        status: "تکمیل شده",
-      });
-      const canceledClasses = await Class.countDocuments({ status: "لغو شده" });
+      const [
+        totalClasses,
+        activeClasses,
+        pendingClasses,
+        completedClasses,
+        canceledClasses,
+        classesByLevel,
+        totalEnrollments,
+      ] = await Promise.all([
+        prisma.class.count(),
+        prisma.class.count({
+          where: {
+            status: "ACTIVE",
+            isConfirmed: true,
+          },
+        }),
+        prisma.class.count({
+          where: {
+            isConfirmed: false,
+          },
+        }),
+        prisma.class.count({
+          where: {
+            status: "COMPLETED",
+          },
+        }),
+        prisma.class.count({
+          where: {
+            status: "CANCELED",
+          },
+        }),
+        prisma.class.groupBy({
+          by: ["level"],
+          _count: true,
+        }),
+        prisma.enrollment.count(),
+      ]);
 
-      // آمار بر اساس سطح
       const levels = ["A1", "A2", "B1", "B2", "C1", "C2"];
-      const classesByLevel = {};
+      const classCountByLevel = {};
       for (const level of levels) {
-        classesByLevel[level] = await Class.countDocuments({ level });
-      }
-
-      // مجموع دانشجوهای ثبت‌نام شده در کل کلاس‌ها
-      const allClasses = await Class.find();
-      let totalEnrollments = 0;
-      for (const classData of allClasses) {
-        totalEnrollments += classData.studentIds.length;
+        const found = classesByLevel.find((item) => item.level === level);
+        classCountByLevel[level] = found ? found._count : 0;
       }
 
       return {
@@ -483,7 +909,7 @@ class ClassService {
         pendingClasses,
         completedClasses,
         canceledClasses,
-        classesByLevel,
+        classesByLevel: classCountByLevel,
         totalEnrollments,
         averageStudentsPerClass:
           totalClasses > 0 ? (totalEnrollments / totalClasses).toFixed(2) : 0,
@@ -499,26 +925,36 @@ class ClassService {
   async addSessionToClass(classId, sessionData) {
     try {
       const { sessionNumber, date, topic } = sessionData;
-      const classData = await Class.findById(classId);
-      if (!classData) throw new Error("Class not found");
+
+      const classExists = await prisma.class.findUnique({
+        where: { id: classId },
+      });
+      if (!classExists) throw new Error("Class not found");
 
       // بررسی تکراری نبودن شماره جلسه
-      const existingSession = classData.sessions.find(
-        (s) => s.sessionNumber === sessionNumber,
-      );
+      const existingSession = await prisma.classSession.findUnique({
+        where: {
+          classId_sessionNumber: {
+            classId: classId,
+            sessionNumber: sessionNumber,
+          },
+        },
+      });
       if (existingSession) {
         throw new Error("Session number already exists");
       }
 
-      classData.sessions.push({
-        sessionNumber,
-        date,
-        topic,
-        isCompleted: false,
+      const newSession = await prisma.classSession.create({
+        data: {
+          classId: classId,
+          sessionNumber: sessionNumber,
+          date: new Date(date),
+          topic: topic || "",
+          isCompleted: false,
+        },
       });
 
-      await classData.save();
-      return classData;
+      return await this.getClassById(classId);
     } catch (err) {
       throw err;
     }
@@ -529,18 +965,21 @@ class ClassService {
   // =====================================
   async completeSession(classId, sessionNumber) {
     try {
-      const classData = await Class.findById(classId);
-      if (!classData) throw new Error("Class not found");
+      const updatedSession = await prisma.classSession.update({
+        where: {
+          classId_sessionNumber: {
+            classId: classId,
+            sessionNumber: sessionNumber,
+          },
+        },
+        data: {
+          isCompleted: true,
+        },
+      });
 
-      const session = classData.sessions.find(
-        (s) => s.sessionNumber === sessionNumber,
-      );
-      if (!session) throw new Error("Session not found");
+      if (!updatedSession) throw new Error("Session not found");
 
-      session.isCompleted = true;
-      await classData.save();
-
-      return classData;
+      return await this.getClassById(classId);
     } catch (err) {
       throw err;
     }
@@ -551,13 +990,47 @@ class ClassService {
   // =====================================
   async getClassStudents(classId) {
     try {
-      const classData = await Class.findById(classId).populate(
-        "studentIds",
-        "name employeeCode phone email level emergencyPhone status",
-      );
+      const classData = await prisma.class.findUnique({
+        where: { id: classId },
+        include: {
+          enrollments: {
+            include: {
+              user: {
+                include: {
+                  studentProfile: true,
+                },
+              },
+            },
+            orderBy: {
+              enrollDate: "desc",
+            },
+          },
+        },
+      });
 
       if (!classData) throw new Error("Class not found");
-      return classData.studentIds;
+
+      return classData.enrollments.map((enrollment) => ({
+        ...enrollment.user,
+        enrollDate: enrollment.enrollDate,
+        status: enrollment.status,
+      }));
+    } catch (err) {
+      throw err;
+    }
+  }
+
+  // =====================================
+  // ✅ دریافت تعداد دانشجویان کلاس
+  // =====================================
+  async getClassStudentsCount(classId) {
+    try {
+      const count = await prisma.enrollment.count({
+        where: {
+          classId: classId,
+        },
+      });
+      return count;
     } catch (err) {
       throw err;
     }
@@ -568,13 +1041,21 @@ class ClassService {
   // =====================================
   async checkClassCapacity(classId) {
     try {
-      const classData = await Class.findById(classId);
+      const classData = await prisma.class.findUnique({
+        where: { id: classId },
+        include: {
+          enrollments: true,
+        },
+      });
       if (!classData) throw new Error("Class not found");
 
+      const currentStudents = classData.enrollments.length;
+      const remainingSeats = classData.capacity - currentStudents;
+
       return {
-        hasCapacity: classData.hasCapacity(),
-        remainingSeats: classData.getRemainingSeats(),
-        currentStudents: classData.studentIds.length,
+        hasCapacity: remainingSeats > 0,
+        remainingSeats: remainingSeats,
+        currentStudents: currentStudents,
         capacity: classData.capacity,
       };
     } catch (err) {

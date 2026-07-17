@@ -43,6 +43,11 @@ router.post("/", userUpload.single("profileImage"), async (req, res) => {
       address,
       status = "ACTIVE",
       birthday,
+      specialization,
+      hireDate,
+      salary,
+      level,
+      emergencyPhone,
     } = req.body;
 
     // Validation
@@ -81,34 +86,48 @@ router.post("/", userUpload.single("profileImage"), async (req, res) => {
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
+    // Prepare user data with relations
+    const userData = {
+      name: name.trim(),
+      employeeCode: employeeCode.trim(),
+      password: hashedPassword,
+      email: email?.trim() || null,
+      role,
+      phone: phone?.trim() || null,
+      address: address?.trim() || null,
+      status,
+      birthday: birthday || null,
+      profileImage: req.file
+        ? `/images/users/${req.file.filename}`
+        : "default-avatar.png",
+    };
+
+    // Add Teacher profile if role is Teacher
+    if (role === "Teacher" && (specialization || hireDate || salary)) {
+      userData.teacherProfile = {
+        create: {
+          specialization: specialization || null,
+          hireDate: hireDate ? new Date(hireDate) : null,
+          salary: salary ? parseFloat(salary) : null,
+        },
+      };
+    }
+
+    // Add Student profile if role is Student
+    if (role === "Student" && (level || emergencyPhone)) {
+      userData.studentProfile = {
+        create: {
+          level: level || "A1",
+          emergencyPhone: emergencyPhone || null,
+        },
+      };
+    }
+
     const newUser = await prisma.user.create({
-      data: {
-        name: name.trim(),
-        employeeCode: employeeCode.trim(),
-        password: hashedPassword,
-        email: email?.trim() || null,
-        role,
-        phone: phone?.trim() || null,
-        address: address?.trim() || null,
-        status,
-        birthday: birthday || null,
-        profileImage: req.file
-          ? `/images/users/${req.file.filename}`
-          : "default-avatar.png",
-      },
-      select: {
-        id: true,
-        name: true,
-        employeeCode: true,
-        email: true,
-        phone: true,
-        role: true,
-        status: true,
-        profileImage: true,
-        birthday: true,
-        address: true,
-        createdAt: true,
-        updatedAt: true,
+      data: userData,
+      include: {
+        teacherProfile: true,
+        studentProfile: true,
       },
     });
 
@@ -166,19 +185,9 @@ router.get("/", authMiddleware, adminMiddleware, async (req, res) => {
         skip,
         take: limit,
         orderBy: { [sortBy]: sortOrder },
-        select: {
-          id: true,
-          name: true,
-          employeeCode: true,
-          email: true,
-          phone: true,
-          role: true,
-          status: true,
-          profileImage: true,
-          birthday: true,
-          address: true,
-          createdAt: true,
-          updatedAt: true,
+        include: {
+          teacherProfile: true,
+          studentProfile: true,
         },
       }),
       prisma.user.count({ where }),
@@ -204,25 +213,181 @@ router.get("/", authMiddleware, adminMiddleware, async (req, res) => {
 });
 
 // =======================
+// ✅ ENROLL STUDENT TO CLASS
+// =======================
+router.patch("/:id/enroll-class", authMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { classId } = req.body;
+
+    if (!classId) {
+      return res.status(400).json({
+        success: false,
+        message: "classId is required",
+      });
+    }
+
+    // بررسی وجود دانشجو
+    const student = await prisma.user.findFirst({
+      where: {
+        id: id,
+        role: "Student",
+        status: "ACTIVE",
+      },
+    });
+
+    if (!student) {
+      return res.status(404).json({
+        success: false,
+        message: "Student not found or inactive",
+      });
+    }
+
+    // بررسی وجود کلاس
+    const classData = await prisma.class.findUnique({
+      where: { id: classId },
+      include: {
+        enrollments: true,
+      },
+    });
+
+    if (!classData) {
+      return res.status(404).json({
+        success: false,
+        message: "Class not found",
+      });
+    }
+
+    // بررسی ظرفیت کلاس
+    if (classData.enrollments.length >= classData.capacity) {
+      return res.status(400).json({
+        success: false,
+        message: "Class is full",
+      });
+    }
+
+    // بررسی تکراری نبودن ثبت‌نام
+    const existing = await prisma.enrollment.findUnique({
+      where: {
+        userId_classId: {
+          userId: id,
+          classId: classId,
+        },
+      },
+    });
+
+    if (existing) {
+      return res.status(400).json({
+        success: false,
+        message: "Student already enrolled in this class",
+      });
+    }
+
+    // ثبت‌نام دانشجو در کلاس
+    const enrollment = await prisma.enrollment.create({
+      data: {
+        userId: id,
+        classId: classId,
+        status: "IN_PROGRESS",
+      },
+      include: {
+        user: {
+          include: {
+            studentProfile: true,
+          },
+        },
+        class: {
+          include: {
+            teacher: true,
+          },
+        },
+      },
+    });
+
+    res.json({
+      success: true,
+      message: "Student enrolled successfully",
+      data: enrollment,
+    });
+  } catch (err) {
+    console.error("❌ Error enrolling student:", err);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: process.env.NODE_ENV === "development" ? err.message : undefined,
+    });
+  }
+});
+
+// =======================
+// ✅ UN-ENROLL STUDENT FROM CLASS
+// =======================
+router.patch("/:id/unenroll-class", authMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { classId } = req.body;
+
+    if (!classId) {
+      return res.status(400).json({
+        success: false,
+        message: "classId is required",
+      });
+    }
+
+    // بررسی وجود دانشجو
+    const student = await prisma.user.findFirst({
+      where: {
+        id: id,
+        role: "Student",
+      },
+    });
+
+    if (!student) {
+      return res.status(404).json({
+        success: false,
+        message: "Student not found",
+      });
+    }
+
+    // حذف ثبت‌نام
+    const result = await prisma.enrollment.deleteMany({
+      where: {
+        userId: id,
+        classId: classId,
+      },
+    });
+
+    if (result.count === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Enrollment not found",
+      });
+    }
+
+    res.json({
+      success: true,
+      message: "Student un-enrolled successfully",
+    });
+  } catch (err) {
+    console.error("❌ Error un-enrolling student:", err);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: process.env.NODE_ENV === "development" ? err.message : undefined,
+    });
+  }
+});
+
+// =======================
 // GET USER BY EMPLOYEE CODE
 // =======================
 router.get("/employee/:code", authMiddleware, async (req, res) => {
   try {
     const user = await prisma.user.findUnique({
       where: { employeeCode: req.params.code },
-      select: {
-        id: true,
-        name: true,
-        employeeCode: true,
-        email: true,
-        phone: true,
-        role: true,
-        status: true,
-        profileImage: true,
-        birthday: true,
-        address: true,
-        createdAt: true,
-        updatedAt: true,
+      include: {
+        teacherProfile: true,
+        studentProfile: true,
       },
     });
 
@@ -244,19 +409,9 @@ router.get("/:id", authMiddleware, async (req, res) => {
   try {
     const user = await prisma.user.findUnique({
       where: { id: req.params.id },
-      select: {
-        id: true,
-        name: true,
-        employeeCode: true,
-        email: true,
-        phone: true,
-        role: true,
-        status: true,
-        profileImage: true,
-        birthday: true,
-        address: true,
-        createdAt: true,
-        updatedAt: true,
+      include: {
+        teacherProfile: true,
+        studentProfile: true,
       },
     });
 
@@ -305,7 +460,9 @@ router.put(
         !req.file &&
         !specialization &&
         !hireDate &&
-        !salary
+        !salary &&
+        !level &&
+        !emergencyPhone
       ) {
         return res.status(400).json({
           success: false,
@@ -362,29 +519,20 @@ router.put(
       const updatedUser = await prisma.user.update({
         where: { id: req.params.id },
         data: updateData,
-        select: {
-          id: true,
-          name: true,
-          employeeCode: true,
-          email: true,
-          phone: true,
-          role: true,
-          status: true,
-          profileImage: true,
-          birthday: true,
-          address: true,
-          createdAt: true,
-          updatedAt: true,
-          teacherProfile: true, // اضافه شد
+        include: {
+          teacherProfile: true,
+          studentProfile: true,
         },
       });
 
       // ====================== بروزرسانی Teacher Profile ======================
       if (
         updatedUser.role === "Teacher" &&
-        (specialization || hireDate || salary)
+        (specialization !== undefined ||
+          hireDate !== undefined ||
+          salary !== undefined)
       ) {
-        await prisma.teacherProfile.upsert({
+        await prisma.teacher.upsert({
           where: { userId: req.params.id },
           update: {
             ...(specialization !== undefined && { specialization }),
@@ -397,20 +545,23 @@ router.put(
           },
           create: {
             userId: req.params.id,
-            specialization: specialization || "",
+            specialization: specialization || null,
             hireDate: hireDate ? new Date(hireDate) : null,
             salary: salary ? parseFloat(salary) : null,
           },
         });
       }
 
-      // ====================== بروزرسانی Student Profile (همان قبلی) ======================
-      if (level || emergencyPhone) {
+      // ====================== بروزرسانی Student Profile ======================
+      if (
+        updatedUser.role === "Student" &&
+        (level !== undefined || emergencyPhone !== undefined)
+      ) {
         await prisma.student.upsert({
           where: { userId: req.params.id },
           update: {
-            ...(level && { level }),
-            ...(emergencyPhone && { emergencyPhone }),
+            ...(level !== undefined && { level }),
+            ...(emergencyPhone !== undefined && { emergencyPhone }),
           },
           create: {
             userId: req.params.id,
@@ -425,7 +576,7 @@ router.put(
         where: { id: req.params.id },
         include: {
           teacherProfile: true,
-          studentProfile: true, // اگر اسم مدل studentProfile باشد
+          studentProfile: true,
         },
       });
 

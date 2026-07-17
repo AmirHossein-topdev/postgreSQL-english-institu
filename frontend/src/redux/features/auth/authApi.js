@@ -1,4 +1,4 @@
-// frontend\src\redux\features\auth\authApi.js
+// frontend/src/redux/features/auth/authApi.js
 import { baseApi } from "@/redux/api/baseApi";
 import { userLoggedIn } from "./authSlice";
 import Cookies from "js-cookie";

@@ -213,7 +213,7 @@ export default function CreateClassFromStudentsPage() {
           const updatePromises = selectedStudents.map(async (studentId) => {
             try {
               const updateResponse = await fetch(
-                `http://localhost:7000/api/users/${studentId}/enroll-class`,
+                `http://localhost:5000/api/users/${studentId}/enroll-class`,
                 {
                   method: "PATCH",
                   headers: { "Content-Type": "application/json" },
@@ -243,10 +243,8 @@ export default function CreateClassFromStudentsPage() {
           background: "#1a1f2e",
           color: "#fff",
           confirmButtonColor: "#3b82f6",
-        });
-
-        router.push("/manager-dashboard/class").then(() => {
-          window.location.reload();
+        }).then(() => {
+          window.location.href = "/manager-dashboard/class";
         });
       } else {
         throw new Error(result.message);

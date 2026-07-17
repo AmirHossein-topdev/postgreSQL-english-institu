@@ -5,7 +5,7 @@
 import React, { useEffect, useState } from "react";
 import Swal from "sweetalert2";
 import Link from "next/link";
-import DashboardLayout from "../../layout";
+import DashboardLayout from "../../../layout";
 import { useRouter } from "next/router";
 import {
   ArrowRight,
@@ -29,7 +29,7 @@ import {
 import {
   useListUsersQuery,
   useUpdateUserMutation,
-} from "../../../../redux/features/userApi";
+} from "../../../../../redux/features/userApi";
 
 export default function EditMyProfilePage() {
   const router = useRouter();
@@ -66,7 +66,7 @@ export default function EditMyProfilePage() {
     const currentUserRaw = sessionStorage.getItem("currentUser");
     if (currentUserRaw) {
       const currentUser = JSON.parse(currentUserRaw);
-      setCurrentUserId(currentUser._id);
+      setCurrentUserId(currentUser.id || currentUser._id);
     }
   }, []);
 
@@ -74,12 +74,20 @@ export default function EditMyProfilePage() {
   useEffect(() => {
     if (!data || !currentUserId) return;
 
+    // ✅ سازگاری با ساختار Prisma: { success: true, data: { users: [], pagination: {} } }
+    const usersList = data?.data?.users || data?.users || data || [];
+
     // پیدا کردن کاربر جاری در لیست کاربران
-    const usersList = Array.isArray(data) ? data : data?.users || [];
-    const currentUser = usersList.find((u) => u._id === currentUserId);
+    const currentUser = usersList.find(
+      (u) => u.id === currentUserId || u._id === currentUserId,
+    );
 
     if (currentUser) {
       setUser(currentUser);
+
+      // ✅ دریافت level از teacherProfile
+      const userLevel =
+        currentUser.teacherProfile?.level || currentUser.level || "";
 
       setFormData({
         name: currentUser.name ?? "",
@@ -89,19 +97,27 @@ export default function EditMyProfilePage() {
         email: currentUser.email ?? "",
         phone: currentUser.phone ?? "",
         address: currentUser.address ?? "",
-        specialization: currentUser.specialization ?? "",
-        level: currentUser.level ?? "",
-        salary: currentUser.salary?.toString() ?? "",
+        specialization:
+          currentUser.teacherProfile?.specialization ||
+          currentUser.specialization ||
+          "",
+        level: userLevel,
+        salary:
+          currentUser.teacherProfile?.salary?.toString() ||
+          currentUser.salary?.toString() ||
+          "",
         birthday: currentUser.birthday ?? "",
-        hireDate: currentUser.hireDate ?? "",
+        hireDate:
+          currentUser.teacherProfile?.hireDate || currentUser.hireDate || "",
         profileImage: null,
       });
 
       // تنظیم پیش‌نمایش عکس فعلی
-      if (currentUser.profileImage) {
-        setPreviewOld(
-          `http://localhost:7000/uploads/${currentUser.profileImage}`,
-        );
+      if (
+        currentUser.profileImage &&
+        currentUser.profileImage !== "default-avatar.png"
+      ) {
+        setPreviewOld(`http://localhost:5000${currentUser.profileImage}`);
       } else {
         setPreviewOld("");
       }
@@ -161,7 +177,7 @@ export default function EditMyProfilePage() {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (!user?._id) {
+    if (!user?.id && !user?._id) {
       Swal.fire({
         icon: "error",
         title: "خطا!",
@@ -174,6 +190,9 @@ export default function EditMyProfilePage() {
     }
 
     try {
+      const userId = user.id || user._id;
+
+      // ✅ استفاده از FormData برای آپلود فایل
       const form = new FormData();
 
       form.append("name", formData.name);
@@ -195,22 +214,20 @@ export default function EditMyProfilePage() {
       }
 
       const result = await updateUser({
-        id: user._id,
+        id: userId,
         formData: form,
       }).unwrap();
 
-      // به‌روزرسانی sessionStorage
+      // ✅ به‌روزرسانی sessionStorage با اطلاعات جدید
       const updatedUser = {
-        ...user,
+        id: userId,
         name: formData.name,
         email: formData.email,
         phone: formData.phone,
         address: formData.address,
-        specialization: formData.specialization,
-        level: formData.level,
-        salary: formData.salary,
-        birthday: formData.birthday,
-        hireDate: formData.hireDate,
+        role: formData.role,
+        employeeCode: formData.employeeCode || user.employeeCode,
+        profileImage: result.data?.profileImage || user.profileImage,
       };
 
       sessionStorage.setItem("currentUser", JSON.stringify(updatedUser));
@@ -223,7 +240,7 @@ export default function EditMyProfilePage() {
         confirmButtonColor: "#3b82f6",
         confirmButtonText: "باشه",
       }).then(() => {
-        router.push("/teacher-dashboard/profile");
+        window.location.href = "/teacher-dashboard/profile";
       });
     } catch (err) {
       console.error("Update error:", err);
@@ -344,53 +361,85 @@ export default function EditMyProfilePage() {
               <Label icon={UserPlus} text="نقش کاربری" />
               <input
                 type="text"
-                value={formData.role === "Teacher" ? "استاد" : formData.role}
+                value={
+                  formData.role === "Teacher"
+                    ? "مربی"
+                    : formData.role === "Admin"
+                      ? "مدیر"
+                      : formData.role === "teacher"
+                        ? "دانش‌آموز"
+                        : formData.role
+                }
                 disabled
                 className="w-full bg-[#0F1420] border border-gray-700 text-gray-500 rounded-2xl p-4 cursor-not-allowed"
               />
             </div>
 
-            {/* تخصص */}
-            <div className="space-y-2">
-              <Label icon={Award} text="تخصص" />
-              <select
-                name="specialization"
-                value={formData.specialization}
-                onChange={handleChange}
-                className="w-full bg-[#0F1420] border border-blue-500/20 text-white rounded-2xl p-4 focus:ring-2 focus:ring-blue-400/20 focus:border-blue-400 outline-none transition-all"
-              >
-                <option value="">انتخاب تخصص...</option>
-                <option value="IELTS">آیلتس (IELTS)</option>
-                <option value="TOEFL">تافل (TOEFL)</option>
-                <option value="Conversation">مکالمه (Conversation)</option>
-                <option value="Grammar">گرامر (Grammar)</option>
-                <option value="Vocabulary">لغات (Vocabulary)</option>
-                <option value="Reading">ریدینگ (Reading)</option>
-                <option value="Writing">رایتینگ (Writing)</option>
-                <option value="Listening">لیسنینگ (Listening)</option>
-                <option value="Kids">کودکان (Kids)</option>
-                <option value="General">زبان عمومی (General)</option>
-              </select>
-            </div>
+            {/* تخصص (فقط برای معلم) */}
+            {formData.role === "Teacher" && (
+              <div className="space-y-2">
+                <Label icon={Award} text="تخصص" />
+                <select
+                  name="specialization"
+                  value={formData.specialization}
+                  onChange={handleChange}
+                  disabled
+                  className="w-full cursor-not-allowed bg-[#0F1420] border border-blue-500/20 text-white rounded-2xl p-4 focus:ring-2 focus:ring-blue-400/20 focus:border-blue-400 outline-none transition-all"
+                >
+                  <option value="">انتخاب تخصص...</option>
+                  <option value="IELTS">آیلتس (IELTS)</option>
+                  <option value="TOEFL">تافل (TOEFL)</option>
+                  <option value="Conversation">مکالمه (Conversation)</option>
+                  <option value="Grammar">گرامر (Grammar)</option>
+                  <option value="Vocabulary">لغات (Vocabulary)</option>
+                  <option value="Listening">لیسنینگ (Listening)</option>
+                  <option value="Reading">ریدینگ (Reading)</option>
+                  <option value="Writing">رایتینگ (Writing)</option>
+                  <option value="Kids">کودکان (Kids)</option>
+                  <option value="General">زبان عمومی (General)</option>
+                </select>
+              </div>
+            )}
 
-            {/* سطح */}
-            <div className="space-y-2">
-              <Label icon={GraduationCap} text="سطح" />
-              <select
-                name="level"
-                value={formData.level}
-                onChange={handleChange}
-                className="w-full bg-[#0F1420] border border-blue-500/20 text-white rounded-2xl p-4 focus:ring-2 focus:ring-blue-400/20 focus:border-blue-400 outline-none transition-all"
-              >
-                <option value="">انتخاب سطح...</option>
-                <option value="A1">A1 (مبتدی)</option>
-                <option value="A2">A2 (مقدماتی)</option>
-                <option value="B1">B1 (متوسط ۱)</option>
-                <option value="B2">B2 (متوسط ۲)</option>
-                <option value="C1">C1 (پیشرفته)</option>
-                <option value="C2">C2 (عالی / مسلط)</option>
-              </select>
-            </div>
+            {/* حقوق (فقط برای معلم) */}
+            {formData.role === "Teacher" && (
+              <div className="space-y-2">
+                <Label icon={DollarSign} text="حقوق پایه (تومان)" />
+                <input
+                  type="text"
+                  name="salary"
+                  disabled
+                  value={
+                    formData.salary
+                      ? Number(formData.salary).toLocaleString("en-US")
+                      : ""
+                  }
+                  onChange={(e) => {
+                    const rawValue = e.target.value.replace(/\D/g, "");
+                    setFormData((p) => ({ ...p, salary: rawValue }));
+                  }}
+                  className="w-full cursor-not-allowed bg-[#0F1420] border border-blue-500/20 text-white rounded-2xl p-4 focus:ring-2 focus:ring-blue-400/20 focus:border-blue-400 outline-none transition-all text-left"
+                  placeholder="مثال: ۱۵,۰۰۰,۰۰۰"
+                />
+              </div>
+            )}
+
+            {/* تاریخ استخدام (فقط برای معلم) */}
+            {formData.role === "Teacher" && (
+              <div className="space-y-2">
+                <Label icon={Briefcase} text="تاریخ استخدام" />
+                <input
+                  type="date"
+                  name="hireDate"
+                  value={
+                    formData.hireDate?.split("T")[0] || formData.hireDate || ""
+                  }
+                  disabled
+                  onChange={handleChange}
+                  className="w-full cursor-not-allowed bg-[#0F1420] border border-blue-500/20 text-white rounded-2xl p-4 focus:ring-2 focus:ring-blue-400/20 focus:border-blue-400 outline-none transition-all"
+                />
+              </div>
+            )}
 
             {/* شماره تماس */}
             <div className="space-y-2">
@@ -419,31 +468,6 @@ export default function EditMyProfilePage() {
               />
             </div>
 
-            {/* حقوق */}
-            <div className="space-y-2">
-              <Label icon={DollarSign} text="حقوق پایه (تومان)" />
-              <div className="relative">
-                <input
-                  type="text"
-                  name="salary"
-                  value={
-                    formData.salary
-                      ? Number(formData.salary).toLocaleString()
-                      : ""
-                  }
-                  onChange={(e) => {
-                    const rawValue = e.target.value.replace(/\D/g, "");
-                    setFormData((p) => ({ ...p, salary: rawValue }));
-                  }}
-                  className="w-full bg-[#0F1420] border border-blue-500/20 text-white rounded-2xl p-4 pl-16 focus:ring-2 focus:ring-blue-400/20 focus:border-blue-400 outline-none transition-all text-left"
-                  placeholder="مثال: ۱۵۰۰۰۰۰۰"
-                />
-                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 text-sm font-bold">
-                  تومان
-                </span>
-              </div>
-            </div>
-
             {/* تاریخ تولد */}
             <div className="space-y-2">
               <Label icon={Calendar} text="تاریخ تولد" />
@@ -462,30 +486,6 @@ export default function EditMyProfilePage() {
                     value = value.slice(0, 10);
                   }
                   setFormData((p) => ({ ...p, birthday: value }));
-                }}
-                placeholder="۱۳۷۰/۰۸/۲۲"
-                className="w-full bg-[#0F1420] border border-blue-500/20 text-white rounded-2xl p-4 focus:ring-2 focus:ring-blue-400/20 focus:border-blue-400 outline-none transition-all font-mono"
-              />
-            </div>
-
-            {/* تاریخ استخدام */}
-            <div className="space-y-2">
-              <Label icon={Briefcase} text="تاریخ استخدام" />
-              <input
-                type="text"
-                name="hireDate"
-                value={formData.hireDate}
-                onChange={(e) => {
-                  let value = e.target.value.replace(/[^0-9/]/g, "");
-                  if (value.length === 4 || value.length === 7) {
-                    if (!value.endsWith("/")) {
-                      value += "/";
-                    }
-                  }
-                  if (value.length > 10) {
-                    value = value.slice(0, 10);
-                  }
-                  setFormData((p) => ({ ...p, hireDate: value }));
                 }}
                 placeholder="۱۳۷۰/۰۸/۲۲"
                 className="w-full bg-[#0F1420] border border-blue-500/20 text-white rounded-2xl p-4 focus:ring-2 focus:ring-blue-400/20 focus:border-blue-400 outline-none transition-all font-mono"
@@ -525,7 +525,7 @@ export default function EditMyProfilePage() {
               {previewNew ? (
                 <div className="flex items-center gap-3 bg-[#1a1f2e] p-2 rounded-2xl border border-blue-500/30">
                   <img
-                    src={previewNew}
+                    src={previewNew.replace("/images/", "/uploads/images/")}
                     alt="Preview"
                     className="w-16 h-16 object-cover rounded-xl border-2 border-blue-400"
                   />
@@ -536,7 +536,7 @@ export default function EditMyProfilePage() {
               ) : previewOld ? (
                 <div className="flex items-center gap-3 bg-[#1a1f2e] p-2 rounded-2xl border border-blue-500/30">
                   <img
-                    src={previewOld}
+                    src={previewOld.replace("/images/", "/uploads/images/")}
                     alt="Current"
                     className="w-16 h-16 object-cover rounded-xl border border-blue-500/30"
                   />

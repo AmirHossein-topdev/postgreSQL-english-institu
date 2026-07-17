@@ -224,7 +224,7 @@ export default function BookPage() {
                 <div className="relative h-48 overflow-hidden bg-gray-900/30 flex items-center justify-center">
                   {product.img ? (
                     <img
-                      src={`http://localhost:7000/uploads/${product.img}`}
+                      src={`http://localhost:5000/uploads/images${product.img}`}
                       alt={product.name || "book image"}
                       className="w-full h-full object-contain hover:scale-110 transition-transform duration-700"
                       onError={(e) => {

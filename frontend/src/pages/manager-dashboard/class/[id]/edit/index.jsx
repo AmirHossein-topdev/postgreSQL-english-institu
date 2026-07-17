@@ -19,8 +19,10 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useListUsersQuery } from "../../../../../redux/features/userApi";
-// تغییر این خط - استفاده از هوک صحیح
-import { useGetClassByIdQuery } from "../../../../../redux/features/classApi";
+import {
+  useGetClassByIdQuery,
+  useUpdateClassMutation,
+} from "../../../../../redux/features/classApi";
 
 // لیست روزهای هفته
 const weekDays = [
@@ -90,12 +92,14 @@ export default function EditClassPage() {
     limit: 100,
   });
 
-  // استفاده از هوک صحیح - useGetClassByIdQuery
   const {
     data: classData,
     isLoading: classLoading,
     refetch,
   } = useGetClassByIdQuery(id, { skip: !id });
+
+  // هوک آپدیت کلاس
+  const [updateClass] = useUpdateClassMutation();
 
   // اساتید و دانشجویان (فیلتر بر اساس status ACTIVE)
   const teachers =
@@ -141,8 +145,9 @@ export default function EditClassPage() {
 
   // بارگذاری اطلاعات کلاس
   useEffect(() => {
-    if (classData?.data) {
-      const classItem = classData.data;
+    // ✅ اصلاح: classData خودش آبجکت کلاس است، نه classData.data
+    if (classData) {
+      const classItem = classData;
 
       const studentIds =
         classItem.enrollments?.map(
@@ -150,13 +155,6 @@ export default function EditClassPage() {
         ) || [];
 
       let statusValue = classItem.status || "UNDER_REGISTRATION";
-      const statusMap = {
-        "در حال ثبت‌نام": "UNDER_REGISTRATION",
-        فعال: "ACTIVE",
-        "تکمیل شده": "COMPLETED",
-        "لغو شده": "CANCELED",
-      };
-      statusValue = statusMap[statusValue] || statusValue;
 
       setFormData({
         name: classItem.name || "",
@@ -245,8 +243,6 @@ export default function EditClassPage() {
         isConfirmed: formData.isConfirmed,
       };
 
-      console.log("📤 Sending update data:", updateData);
-
       const response = await fetch(`http://localhost:5000/api/class/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -255,7 +251,7 @@ export default function EditClassPage() {
 
       const result = await response.json();
 
-      if (result.success) {
+      if (response.ok && result.success) {
         Swal.fire({
           icon: "success",
           title: "موفقیت!",
@@ -265,13 +261,13 @@ export default function EditClassPage() {
           confirmButtonColor: "#3b82f6",
           confirmButtonText: "باشه",
         }).then(() => {
-          router.push("/manager-dashboard/class");
+          window.location.href = "/manager-dashboard/class";
         });
       } else {
-        throw new Error(result.message);
+        throw new Error(result.message || "خطا در به‌روزرسانی کلاس");
       }
     } catch (err) {
-      console.error("Update class error:", err);
+      console.error("❌ Update class error:", err);
       Swal.fire({
         icon: "error",
         title: "خطا!",

@@ -93,6 +93,8 @@ router.post(
         }
       }
 
+      console.log("🔍 req.user:", req.user);
+      console.log("🔍 req.user?.id:", req.user?.id);
       // ایجاد کلاس جدید
       const newClass = await prisma.class.create({
         data: {
@@ -104,7 +106,8 @@ router.post(
           schedule: schedule || "",
           room: room || "",
           status: status || "UNDER_REGISTRATION",
-          createdById: req.user?.id,
+          // createdById: req.user?.id,
+          createdById: "2bf47aed-5afd-4a0e-862b-ec5d45988e3d",
           startDate: startDate ? new Date(startDate) : null,
           endDate: endDate ? new Date(endDate) : null,
           capacity: capacity || 10,
@@ -395,14 +398,6 @@ router.get("/:id", authMiddleware, async (req, res) => {
             employeeCode: true,
             phone: true,
             email: true,
-            teacherProfile: {
-              select: {
-                specialization: true,
-                hireDate: true,
-                salary: true,
-                resume: true,
-              },
-            },
           },
         },
         enrollments: {
@@ -499,7 +494,110 @@ router.delete(
     }
   },
 );
+// backend/src/routes/class.routes.js
 
+// =======================
+// ✅ GET CLASSES BY STUDENT
+// =======================
+router.get("/student/:studentId", authMiddleware, async (req, res) => {
+  try {
+    const { studentId } = req.params;
+
+    // پیدا کردن کلاس‌هایی که دانشجو در آنها ثبت‌نام شده است
+    const enrollments = await prisma.enrollment.findMany({
+      where: { userId: studentId },
+      include: {
+        class: {
+          include: {
+            teacher: {
+              select: {
+                id: true,
+                name: true,
+                employeeCode: true,
+                email: true,
+                phone: true,
+                teacherProfile: true,
+              },
+            },
+            enrollments: {
+              include: {
+                user: {
+                  select: {
+                    id: true,
+                    name: true,
+                    employeeCode: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      orderBy: { enrollDate: "desc" },
+    });
+
+    const classes = enrollments.map((enrollment) => enrollment.class);
+
+    res.json({
+      success: true,
+      data: classes,
+    });
+  } catch (err) {
+    console.error("❌ Error fetching student classes:", err);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
+});
+
+// =======================
+// ✅ GET CLASSES BY TEACHER
+// =======================
+router.get("/teacher/:teacherId", authMiddleware, async (req, res) => {
+  try {
+    const { teacherId } = req.params;
+
+    const classes = await prisma.class.findMany({
+      where: { teacherId },
+      include: {
+        teacher: {
+          select: {
+            id: true,
+            name: true,
+            employeeCode: true,
+            email: true,
+            phone: true,
+            teacherProfile: true,
+          },
+        },
+        enrollments: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                name: true,
+                employeeCode: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: { startDate: "desc" },
+    });
+
+    res.json({
+      success: true,
+      data: classes,
+    });
+  } catch (err) {
+    console.error("❌ Error fetching teacher classes:", err);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
+});
 // =======================
 // ✅ ADD STUDENT: افزودن دانشجو به کلاس
 // =======================
