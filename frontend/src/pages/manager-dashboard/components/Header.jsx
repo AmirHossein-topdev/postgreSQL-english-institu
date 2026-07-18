@@ -1,4 +1,4 @@
-// frontend\src\pages\trainers-dashboard\components\Header.jsx
+// frontend/src/pages/trainers-dashboard/components/Header.jsx
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
@@ -6,6 +6,7 @@ import Image from "next/image";
 import { useRouter } from "next/router";
 import Swal from "sweetalert2";
 import "sweetalert2/dist/sweetalert2.min.css";
+import Link from "next/link";
 
 import {
   Menu,
@@ -15,99 +16,29 @@ import {
   ShieldCheck,
   Zap,
   ChevronDown,
+  User,
+  Edit,
+  Mail,
+  Phone,
+  Calendar,
+  Award,
+  BookOpen,
+  Users,
+  Home,
+  BarChart3,
+  Clock,
 } from "lucide-react";
 
-/**
- * Header component:
- * - می‌خونه currentUser از sessionStorage
- * - با _id به http://localhost:5000/api/users درخواست می‌زنه و کاربر رو پیدا می‌کنه
- * - اطلاعات رو در هدر نمایش می‌ده و امکان خروج داره
- */
+import { useListUsersQuery } from "@/redux/features/userApi";
 
 export default function Header({ onOpenSidebar }) {
   const [showProfileInfo, setShowProfileInfo] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [serverUser, setServerUser] = useState(null); // اطلاعات کامل از API
-  const [clientUser, setClientUser] = useState(null); // اطلاعات از sessionStorage
   const profileRef = useRef(null);
   const router = useRouter();
 
-  // خواندن currentUser از sessionStorage هنگام اولین mount
-  useEffect(() => {
-    try {
-      const raw =
-        typeof window !== "undefined"
-          ? sessionStorage.getItem("currentUser")
-          : null;
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        setClientUser(parsed);
-      } else {
-        setClientUser(null);
-      }
-    } catch (e) {
-      console.error("Failed to parse currentUser from sessionStorage:", e);
-      setClientUser(null);
-    }
-  }, []);
+  const { data, isLoading, isError } = useListUsersQuery();
 
-  // اگر clientUser داشتیم، از API لیست کاربران رو بگیر و کاربر با همان _id رو پیدا کن
-  useEffect(() => {
-    let mounted = true;
-    const fetchUserFromApi = async () => {
-      if (!clientUser || !clientUser._id) return;
-      setLoading(true);
-      try {
-        // درخواست به endpoint اصلی
-        const res = await fetch("http://localhost:5000/api/users");
-        if (!res.ok) {
-          throw new Error(`خطا از سرور: ${res.status}`);
-        }
-        const data = await res.json();
-
-        // فرض می‌کنیم data آرایه‌ای از کاربران است؛ سعی می‌کنیم بر اساس _id پیدا کنیم
-        let found = null;
-        if (Array.isArray(data)) {
-          found = data.find((u) => String(u._id) === String(clientUser._id));
-        } else if (data && Array.isArray(data.users)) {
-          // بعضی APIها داده‌ها را در { users: [...] } برمی‌گردانند
-          found = data.users.find(
-            (u) => String(u._id) === String(clientUser._id),
-          );
-        } else if (data && data._id) {
-          // شاید endpoint تک کاربر برگردونه
-          found = String(data._id) === String(clientUser._id) ? data : null;
-        }
-
-        // اگر پیدا نشد، تلاش کن با employeeCode هم پیدا کنی (فقط برای احتیاط)
-        if (!found && clientUser.employeeCode && Array.isArray(data)) {
-          found = data.find(
-            (u) => String(u.employeeCode) === String(clientUser.employeeCode),
-          );
-        }
-
-        if (mounted) {
-          if (found) {
-            setServerUser(found);
-          } else {
-            console.warn("User not found on API with _id:", clientUser._id);
-            setServerUser(null);
-          }
-        }
-      } catch (err) {
-        console.error("Failed to fetch users from API:", err);
-        if (mounted) setServerUser(null);
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    };
-
-    fetchUserFromApi();
-
-    return () => {
-      mounted = false;
-    };
-  }, [clientUser]);
+  const [user, setUser] = useState(null);
 
   // بستن منو هنگام کلیک بیرون
   useEffect(() => {
@@ -120,7 +51,46 @@ export default function Header({ onOpenSidebar }) {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // هندلر خروج
+  // خواندن currentUser از sessionStorage و مطابقت با دیتای API
+  useEffect(() => {
+    if (!data) return;
+
+    try {
+      const currentUserRaw = sessionStorage.getItem("currentUser");
+      if (!currentUserRaw) return;
+
+      const currentUser = JSON.parse(currentUserRaw);
+      const userId = currentUser.id || currentUser._id;
+
+      if (!userId) return;
+
+      const usersList = data?.data?.users || data?.users || data || [];
+
+      if (!Array.isArray(usersList) || usersList.length === 0) return;
+
+      const foundUser = usersList.find(
+        (u) => u.id === userId || u._id === userId,
+      );
+
+      if (foundUser) {
+        setUser(foundUser);
+      }
+    } catch (error) {
+      console.error("Error loading user:", error);
+    }
+  }, [data]);
+
+  const displayName = user?.name || "کاربر مهمان";
+  const displayRole = user?.role || "کاربر";
+  const isActive = user?.status === "ACTIVE";
+  const displayEmail = user?.email || "—";
+  const displayEmployeeCode = user?.employeeCode || "—";
+  const displayPhone = user?.phone || "—";
+  const displayBirthday = user?.birthday || "—";
+
+  // تشخیص مسیر فعلی برای هایلایت
+  const currentPath = router.pathname;
+
   const handleLogout = async () => {
     const result = await Swal.fire({
       title: "خروج از حساب",
@@ -129,105 +99,122 @@ export default function Header({ onOpenSidebar }) {
       showCancelButton: true,
       confirmButtonText: "بله، خارج شو",
       cancelButtonText: "انصراف",
-      confirmButtonColor: "#facc15", // زرد
-      cancelButtonColor: "#374151", // خاکستری
+      confirmButtonColor: "#50A2FF",
+      cancelButtonColor: "#374151",
       reverseButtons: true,
     });
 
     if (result.isConfirmed) {
-      // پاک‌سازی کل session و local
-      try {
-        if (typeof window !== "undefined") {
-          sessionStorage.clear();
-          sessionStorage.clear();
-        }
-      } catch (e) {
-        console.error("Error clearing storage:", e);
-      }
-      // ریدایرکت امن به صفحه اصلی
+      sessionStorage.clear();
       router.replace("/");
     }
   };
 
-  // اطلاعاتی که نمایش داده می‌شود: اگر serverUser هست از آن استفاده کن، وگرنه از clientUser
-  const displayUser = serverUser || clientUser || {};
-  const displayName = displayUser.name || "کاربر مهمان";
-  const displayRole = displayUser.role || "—";
-  const displayEmail = displayUser.email || "—";
-  const profileImage = displayUser.profileImage || null;
-  const isActive = displayUser.status === "active" || true; // اگر سرور وضعیت نداد، فرض کن فعال
+  // تعیین عنوان پنل بر اساس نقش
+  const getPanelTitle = () => {
+    const roleMap = {
+      Admin: "مدیریت",
+      Teacher: "اساتید",
+      Student: "دانشجویان",
+    };
+    return roleMap[displayRole] || displayRole;
+  };
 
   return (
-    <header className="flex items-center justify-between px-6 mb-3 py-4 bg-[#1a1d23]/50 backdrop-blur-md border border-gray-800 rounded-[2rem] sticky top-4 z-50 shadow-2xl transition-all duration-500 hover:border-cyan-400/30">
+    <header className="flex items-center justify-between px-4 sm:px-6 mb-3 py-3 sm:py-4 bg-[#1a1d23]/80 backdrop-blur-xl border border-gray-800 rounded-[2rem] sticky top-4 z-50 shadow-2xl shadow-blue-500/5 transition-all duration-500 hover:border-blue-400/30 hover:shadow-blue-500/10">
       {/* سمت چپ: کنترل موبایل و تایتل سیستم */}
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-3 sm:gap-4">
         <button
           onClick={onOpenSidebar}
-          className="md:hidden p-3 bg-cyan-400 text-black rounded-xl hover:scale-95 transition-transform"
+          className="md:hidden p-2.5 sm:p-3 bg-gradient-to-r from-blue-500 to-cyan-500 text-black rounded-xl hover:scale-95 transition-transform shadow-lg shadow-blue-500/25"
           aria-label="Menu"
         >
-          <Menu size={20} strokeWidth={3} />
+          <Menu size={18} strokeWidth={3} />
         </button>
 
         <div className="flex flex-col">
-          <h2 className="text-white text-xs font-black uppercase tracking-[0.3em] opacity-50 leading-none">
-            Command Center
-          </h2>
+          <div className="flex items-center gap-2">
+            <div className="hidden sm:block w-2 h-2 rounded-full bg-green-400 animate-pulse shadow-lg shadow-green-400/50"></div>
+            <h2 className="text-white text-[10px] sm:text-xs font-black uppercase tracking-[0.3em] opacity-50 leading-none">
+              Command Center
+            </h2>
+          </div>
           <div className="flex items-center gap-2 mt-1">
-            <span className="hidden md:block text-xl font-black italic text-white uppercase tracking-tighter">
-              پنل <span className="text-cyan-400">مدیریت {displayRole}</span>
+            <span className="hidden md:block text-lg sm:text-xl font-black italic text-white uppercase tracking-tighter">
+              پنل <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-cyan-400 to-blue-500">
+                {getPanelTitle()}
+              </span>
             </span>
+            {isActive && (
+              <span className="hidden lg:inline-block text-[8px] font-black text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                آنلاین
+              </span>
+            )}
           </div>
         </div>
       </div>
 
       {/* سمت راست: نوتیفیکیشن و پروفایل */}
-      <div className="flex items-center gap-4 lg:gap-8">
+      <div className="flex items-center gap-2 sm:gap-4 lg:gap-6">
+        {/* Quick Actions - مخفی در موبایل */}
+        <div className="hidden md:flex items-center gap-2">
+          <button className="p-2 bg-gray-800/30 text-gray-500 hover:text-blue-400 hover:bg-gray-800/60 rounded-xl transition-all text-[10px] font-black uppercase tracking-widest border border-transparent hover:border-blue-500/20">
+            <BarChart3 size={16} />
+          </button>
+          <button className="p-2 bg-gray-800/30 text-gray-500 hover:text-blue-400 hover:bg-gray-800/60 rounded-xl transition-all text-[10px] font-black uppercase tracking-widest border border-transparent hover:border-blue-500/20">
+            <Calendar size={16} />
+          </button>
+        </div>
+
         {/* نوتیفیکیشن‌های سیستمی */}
-        <div className="relative hidden sm:block">
-          <button className="p-3 bg-gray-800/50 text-gray-400 hover:text-cyan-400 hover:bg-gray-800 rounded-2xl transition-all relative group">
-            <Bell size={20} />
-            <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full animate-ping"></span>
-            <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full"></span>
+        <div className="relative">
+          <button className="p-2.5 sm:p-3 bg-gray-800/40 text-gray-400 hover:text-blue-400 hover:bg-gray-800/70 rounded-xl transition-all relative group border border-gray-700/50 hover:border-blue-500/30">
+            <Bell size={18} className="sm:w-5 sm:h-5" />
+            <span className="absolute top-1.5 right-1.5 sm:top-2 sm:right-2 w-2 h-2 bg-red-500 rounded-full animate-ping"></span>
+            <span className="absolute top-1.5 right-1.5 sm:top-2 sm:right-2 w-2 h-2 bg-red-500 rounded-full"></span>
           </button>
         </div>
 
         {/* بخش پروفایل */}
         <div ref={profileRef} className="relative">
           <div
-            className="flex items-center gap-4 p-1 pr-4 bg-gray-900/80 border border-gray-800 rounded-full cursor-pointer hover:border-cyan-400/50 transition-all group shadow-lg"
+            className="flex items-center gap-2 sm:gap-4 p-0.5 sm:p-1 pr-2 sm:pr-4 bg-gray-900/80 border border-gray-700/60 rounded-full cursor-pointer hover:border-blue-400/60 transition-all group shadow-lg hover:shadow-blue-500/10"
             onClick={() => setShowProfileInfo((s) => !s)}
           >
             <div className="flex flex-col text-right hidden lg:flex">
-              <span className="text-white font-black italic text-sm tracking-tight group-hover:text-cyan-400 transition-colors">
-                {loading ? "در حال بارگذاری..." : displayName}
+              <span className="text-white font-black text-xs sm:text-sm tracking-tight group-hover:text-blue-400 transition-colors">
+                {displayName}
               </span>
-              <span className="text-[9px] text-gray-500 uppercase font-black tracking-widest flex items-center gap-1 justify-end">
+              <span className="text-[8px] sm:text-[9px] text-gray-500 uppercase font-black tracking-widest flex items-center gap-1 justify-end">
                 {displayRole}{" "}
-                <ShieldCheck size={10} className="text-cyan-400" />
+                <ShieldCheck size={10} className="text-blue-400" />
               </span>
             </div>
 
             <div className="relative">
-              <div className="absolute inset-0 bg-cyan-400 rounded-full blur-md opacity-0 group-hover:opacity-40 transition-opacity"></div>
-              {profileImage ? (
+              <div className="absolute inset-0 bg-gradient-to-r from-blue-400 to-cyan-400 rounded-full blur-md opacity-0 group-hover:opacity-40 transition-opacity duration-500"></div>
+              {user?.profileImage && user.profileImage !== "default-avatar.png" ? (
                 <Image
-                  src={`http://localhost:5000/uploads/${profileImage}`}
-                  width={48}
-                  height={48}
+                  src={
+                    user.profileImage.startsWith("http")
+                      ? user.profileImage
+                      : `http://localhost:5000/uploads/${user.profileImage}`
+                  }
+                  width={44}
+                  height={44}
                   alt={displayName}
-                  className="rounded-full border-2 border-cyan-400 relative z-10 grayscale-[50%] group-hover:grayscale-0 transition-all"
+                  className="rounded-full border-2 border-blue-400 relative z-10 grayscale-[40%] group-hover:grayscale-0 transition-all duration-500 object-cover w-10 h-10 sm:w-12 sm:h-12"
                   unoptimized
                 />
               ) : (
-                <div className="w-12 h-12 rounded-full bg-gray-800 border-2 border-cyan-400 flex items-center justify-center text-cyan-400 font-black">
-                  {displayName.charAt(0)}
+                <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-gradient-to-br from-blue-500/30 to-cyan-500/30 border-2 border-blue-400 flex items-center justify-center text-blue-400 font-black text-base sm:text-xl relative z-10">
+                  {displayName.charAt(0).toUpperCase()}
                 </div>
               )}
 
               <div
-                className={`absolute bottom-0 right-0 w-3.5 h-3.5 rounded-full border-2 border-[#1a1d23] z-20 ${
-                  isActive ? "bg-green-500" : "bg-gray-500"
+                className={`absolute bottom-0 right-0 w-3 h-3 sm:w-3.5 sm:h-3.5 rounded-full border-2 border-[#1a1d23] z-20 ${
+                  isActive ? "bg-emerald-500 shadow-lg shadow-emerald-500/50" : "bg-gray-500"
                 }`}
                 title={isActive ? "فعال" : "غیرفعال"}
               />
@@ -241,53 +228,136 @@ export default function Header({ onOpenSidebar }) {
             />
           </div>
 
-          {/* دراپ‌دان منو */}
+          {/* دراپ‌دان منو - طراحی حرفه‌ای */}
           {showProfileInfo && (
-            <div className="absolute left-0 lg:right-0 mt-4 bg-[#1a1d23] border border-gray-800 p-2 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] w-56 animate-in fade-in zoom-in duration-200 z-50">
-              <div className="p-3 border-b border-gray-800 mb-2">
-                <p className="text-gray-500 text-[9px] uppercase font-black tracking-widest mb-1">
-                  وضعیت عملیاتی
-                </p>
-                <div className="flex items-center gap-2 text-sm">
-                  <span
-                    className={`${isActive ? "text-green-400" : "text-gray-400"} font-bold uppercase italic`}
-                  >
-                    {isActive ? "فعال" : "غیرفعال"}
-                  </span>
-                  <div className="flex items-center gap-2 text-green-400 text-xs font-bold uppercase italic">
-                    <Zap size={12} /> Ready for Service
+            <div className="absolute left-0 lg:left-0 mt-3 bg-[#1a1d23] border border-gray-700/60 p-2 rounded-2xl shadow-2xl shadow-black/50 w-64 sm:w-72 animate-in fade-in slide-in-from-top-2 duration-200 z-50 backdrop-blur-xl bg-[#1a1d23]/95">
+              {/* هدر پروفایل */}
+              <div className="p-4 rounded-xl bg-gradient-to-r from-blue-500/10 to-cyan-500/10 border border-blue-500/20 mb-3">
+                <div className="flex items-center gap-3">
+                  <div className="relative">
+                    {user?.profileImage && user.profileImage !== "default-avatar.png" ? (
+                      <Image
+                        src={
+                          user.profileImage.startsWith("http")
+                            ? user.profileImage
+                            : `http://localhost:5000/uploads/${user.profileImage}`
+                        }
+                        width={44}
+                        height={44}
+                        alt={displayName}
+                        className="rounded-full border-2 border-blue-400 object-cover w-11 h-11"
+                        unoptimized
+                      />
+                    ) : (
+                      <div className="w-11 h-11 rounded-full bg-gradient-to-br from-blue-500/30 to-cyan-500/30 border-2 border-blue-400 flex items-center justify-center text-blue-400 font-black text-lg">
+                        {displayName.charAt(0).toUpperCase()}
+                      </div>
+                    )}
+                    <div
+                      className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-[#1a1d23] ${
+                        isActive ? "bg-emerald-400" : "bg-gray-500"
+                      }`}
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-white font-black text-sm">{displayName}</p>
+                    <p className="text-[10px] text-gray-400">{displayRole}</p>
                   </div>
                 </div>
               </div>
 
-              <div className="space-y-1 text-right">
-                <button className="w-full flex items-center justify-end gap-3 p-3 text-gray-400 hover:bg-cyan-400 hover:text-black rounded-xl transition-all text-sm font-bold italic">
-                  تنظیمات امنیتی <Settings size={16} />
-                </button>
+              {/* لینک‌های سریع */}
+              <div className="grid grid-cols-2 gap-1.5 px-1 mb-2">
+                <Link
+                  href="/manager-dashboard"
+                  className="flex items-center justify-center gap-2 p-2.5 text-[10px] font-bold text-gray-400 hover:text-blue-400 hover:bg-blue-500/10 rounded-xl transition-all border border-transparent hover:border-blue-500/20"
+                >
+                  <Home size={14} />
+                  داشبورد
+                </Link>
+                <Link
+                  href="/manager-dashboard/class"
+                  className="flex items-center justify-center gap-2 p-2.5 text-[10px] font-bold text-gray-400 hover:text-blue-400 hover:bg-blue-500/10 rounded-xl transition-all border border-transparent hover:border-blue-500/20"
+                >
+                  <BookOpen size={14} />
+                  کلاس‌ها
+                </Link>
+                <Link
+                  href="/manager-dashboard/students"
+                  className="flex items-center justify-center gap-2 p-2.5 text-[10px] font-bold text-gray-400 hover:text-blue-400 hover:bg-blue-500/10 rounded-xl transition-all border border-transparent hover:border-blue-500/20"
+                >
+                  <Users size={14} />
+                  دانشجویان
+                </Link>
+                <Link
+                  href="/manager-dashboard/schedule"
+                  className="flex items-center justify-center gap-2 p-2.5 text-[10px] font-bold text-gray-400 hover:text-blue-400 hover:bg-blue-500/10 rounded-xl transition-all border border-transparent hover:border-blue-500/20"
+                >
+                  <Clock size={14} />
+                  برنامه
+                </Link>
+              </div>
+
+              <div className="border-t border-gray-700/50 my-1"></div>
+
+              {/* منوی اصلی */}
+              <div className="space-y-0.5 px-1">
+                <Link
+                  href="/manager-dashboard/admins"
+                  className="w-full flex items-center justify-end gap-3 p-2.5 text-gray-400 hover:bg-blue-500/10 hover:text-blue-400 rounded-xl transition-all text-sm font-bold italic group"
+                >
+                  <span>مشاهده پروفایل</span>
+                  <User size={16} className="group-hover:scale-110 transition-transform" />
+                </Link>
+
+                <Link
+                  href={`/manager-dashboard/profile/${user?.id || user?._id}/edit`}
+                  className="w-full flex items-center justify-end gap-3 p-2.5 text-gray-400 hover:bg-blue-500/10 hover:text-blue-400 rounded-xl transition-all text-sm font-bold italic group"
+                >
+                  <span>ویرایش اطلاعات</span>
+                  <Edit size={16} className="group-hover:scale-110 transition-transform" />
+                </Link>
+
+                
 
                 <button
                   onClick={handleLogout}
-                  className="w-full flex items-center justify-end gap-3 p-3 text-red-400 hover:bg-red-400/10 rounded-xl transition-all text-sm font-bold italic border border-transparent hover:border-red-400/20"
+                  className="w-full flex items-center justify-end gap-3 p-2.5 text-red-400 hover:bg-red-500/10 rounded-xl transition-all text-sm font-bold italic group border border-transparent hover:border-red-500/20"
                 >
-                  خروج از حساب <LogOut size={16} />
+                  <span>خروج از حساب</span>
+                  <LogOut size={16} className="group-hover:scale-110 transition-transform" />
                 </button>
+              </div>
 
-                <div className="pt-2 border-t border-gray-800">
-                  <p className="text-[11px] text-gray-500">
-                    ایمیل:
-                    <span className="text-white text-[11px] font-bold">
-                      {" "}
-                      {displayEmail}
-                    </span>
-                  </p>
-                  <p className="text-[11px] text-gray-500 mt-1">
-                    کد عضویت:
-                    <span className="text-white text-[11px] font-bold">
-                      {" "}
-                      {displayUser.employeeCode || "—"}
-                    </span>
-                  </p>
+              {/* اطلاعات کاربری */}
+              <div className="mt-2 pt-3 border-t border-gray-700/50 px-2">
+                <div className="grid grid-cols-2 gap-1 text-[10px]">
+                  <div className="bg-gray-800/30 p-2 rounded-lg">
+                    <p className="text-gray-500">ایمیل</p>
+                    <p className="text-white font-bold truncate">{displayEmail}</p>
+                  </div>
+                  <div className="bg-gray-800/30 p-2 rounded-lg">
+                    <p className="text-gray-500">کد عضویت</p>
+                    <p className="text-white font-bold">{displayEmployeeCode}</p>
+                  </div>
+                  <div className="bg-gray-800/30 p-2 rounded-lg col-span-2">
+                    <p className="text-gray-500">تاریخ تولد</p>
+                    <p className="text-white font-bold">{displayBirthday}</p>
+                  </div>
                 </div>
+              </div>
+
+              {/* وضعیت سیستم */}
+              <div className="mt-2 pt-2 border-t border-gray-700/50 flex items-center justify-between px-2">
+                <div className="flex items-center gap-2">
+                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></div>
+                  <span className="text-[8px] text-gray-500 font-bold uppercase tracking-widest">
+                    سیستم فعال
+                  </span>
+                </div>
+                <span className="text-[8px] text-gray-600">
+                  v2.0.0
+                </span>
               </div>
             </div>
           )}

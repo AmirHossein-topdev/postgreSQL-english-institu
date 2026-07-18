@@ -2,7 +2,7 @@
 
 import express from "express";
 import { PrismaClient } from "@prisma/client";
-import { protect, authorize } from "../middleware/authMiddleware.js";
+import { protect, authorize } from "../../middleware/authMiddleware.js"; // ✅ ایمپورت درست
 
 const router = express.Router();
 const prisma = new PrismaClient();
@@ -136,7 +136,6 @@ router.post("/", protect(["Admin"]), async (req, res) => {
         skipDuplicates: true,
       });
 
-      // دریافت مجدد کلاس با اطلاعات به‌روز
       const updatedClass = await prisma.class.findUnique({
         where: { id: newClass.id },
         include: {
@@ -178,7 +177,6 @@ router.post("/", protect(["Admin"]), async (req, res) => {
   } catch (err) {
     console.error("❌ Error creating class:", err);
 
-    // خطای Prisma - کلید خارجی
     if (err.code === "P2003") {
       return res.status(400).json({
         success: false,
@@ -186,7 +184,6 @@ router.post("/", protect(["Admin"]), async (req, res) => {
       });
     }
 
-    // خطای Prisma - تکراری
     if (err.code === "P2002") {
       return res.status(400).json({
         success: false,
@@ -205,88 +202,139 @@ router.post("/", protect(["Admin"]), async (req, res) => {
 // =======================
 // ✅ UPDATE: آپدیت کلاس
 // =======================
-router.put(
-  "/:id",
-  authMiddleware,
-  roleMiddleware(["Admin"]),
-  async (req, res) => {
-    try {
-      const {
-        name,
-        level,
-        teacherId,
-        term,
-        tuition,
-        schedule,
-        room,
-        status,
-        startDate,
-        endDate,
-        capacity,
-        totalSessions,
-        description,
-        isConfirmed,
-        studentIds,
-      } = req.body;
+router.put("/:id", protect(["Admin"]), async (req, res) => { // ✅ اصلاح شد
+  try {
+    const {
+      name,
+      level,
+      teacherId,
+      term,
+      tuition,
+      schedule,
+      room,
+      status,
+      startDate,
+      endDate,
+      capacity,
+      totalSessions,
+      description,
+      isConfirmed,
+      studentIds,
+    } = req.body;
 
-      const existingClass = await prisma.class.findUnique({
-        where: { id: req.params.id },
-        include: {
-          enrollments: true,
+    const existingClass = await prisma.class.findUnique({
+      where: { id: req.params.id },
+      include: {
+        enrollments: true,
+      },
+    });
+
+    if (!existingClass) {
+      return res.status(404).json({
+        success: false,
+        message: "کلاس یافت نشد",
+      });
+    }
+
+    if (teacherId) {
+      const teacher = await prisma.user.findFirst({
+        where: {
+          id: teacherId,
+          role: "Teacher",
+          status: "ACTIVE",
         },
       });
-
-      if (!existingClass) {
-        return res.status(404).json({
+      if (!teacher) {
+        return res.status(400).json({
           success: false,
-          message: "Class not found",
+          message: "استاد یافت نشد یا غیرفعال است",
         });
       }
+    }
 
-      // بررسی وجود استاد
-      if (teacherId) {
-        const teacher = await prisma.user.findFirst({
+    const updateData = {
+      name,
+      level,
+      teacherId,
+      term,
+      tuition: tuition !== undefined ? parseFloat(tuition) : undefined,
+      schedule,
+      room,
+      status,
+      startDate: startDate ? new Date(startDate) : null,
+      endDate: endDate ? new Date(endDate) : null,
+      capacity,
+      totalSessions,
+      description,
+      isConfirmed: isConfirmed !== undefined ? isConfirmed : undefined,
+    };
+
+    Object.keys(updateData).forEach(
+      (key) => updateData[key] === undefined && delete updateData[key],
+    );
+
+    const updatedClass = await prisma.class.update({
+      where: { id: req.params.id },
+      data: updateData,
+      include: {
+        teacher: {
+          select: {
+            id: true,
+            name: true,
+            employeeCode: true,
+            email: true,
+            phone: true,
+          },
+        },
+        enrollments: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                name: true,
+                employeeCode: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (studentIds && Array.isArray(studentIds)) {
+      if (studentIds.length > 0) {
+        const students = await prisma.user.findMany({
           where: {
-            id: teacherId,
-            role: "Teacher",
+            id: { in: studentIds },
+            role: "Student",
             status: "ACTIVE",
           },
         });
-        if (!teacher) {
+
+        if (students.length !== studentIds.length) {
           return res.status(400).json({
             success: false,
-            message: "Teacher not found or not active",
+            message: "برخی از دانشجویان یافت نشدند یا غیرفعال هستند",
           });
         }
       }
 
-      // آماده‌سازی داده‌های به‌روزرسانی
-      const updateData = {
-        name,
-        level,
-        teacherId,
-        term,
-        tuition: tuition !== undefined ? parseFloat(tuition) : undefined,
-        schedule,
-        room,
-        status,
-        startDate: startDate ? new Date(startDate) : null,
-        endDate: endDate ? new Date(endDate) : null,
-        capacity,
-        totalSessions,
-        description,
-        isConfirmed: isConfirmed !== undefined ? isConfirmed : undefined,
-      };
+      await prisma.enrollment.deleteMany({
+        where: { classId: req.params.id },
+      });
 
-      // حذف فیلدهای undefined
-      Object.keys(updateData).forEach(
-        (key) => updateData[key] === undefined && delete updateData[key],
-      );
+      if (studentIds.length > 0) {
+        await prisma.enrollment.createMany({
+          data: studentIds.map((studentId) => ({
+            userId: studentId,
+            classId: req.params.id,
+            status: "IN_PROGRESS",
+          })),
+          skipDuplicates: true,
+        });
+      }
 
-      // به‌روزرسانی کلاس
-      const updatedClass = await prisma.class.update({
+      const finalClass = await prisma.class.findUnique({
         where: { id: req.params.id },
-        data: updateData,
         include: {
           teacher: {
             select: {
@@ -311,89 +359,24 @@ router.put(
         },
       });
 
-      // مدیریت دانشجوها (در صورت ارسال studentIds)
-      if (studentIds && Array.isArray(studentIds)) {
-        // بررسی وجود دانشجوها
-        if (studentIds.length > 0) {
-          const students = await prisma.user.findMany({
-            where: {
-              id: { in: studentIds },
-              role: "Student",
-              status: "ACTIVE",
-            },
-          });
-
-          if (students.length !== studentIds.length) {
-            return res.status(400).json({
-              success: false,
-              message: "Some students not found or inactive",
-            });
-          }
-        }
-
-        // حذف enrollment های قبلی
-        await prisma.enrollment.deleteMany({
-          where: { classId: req.params.id },
-        });
-
-        // ایجاد enrollment جدید
-        if (studentIds.length > 0) {
-          await prisma.enrollment.createMany({
-            data: studentIds.map((studentId) => ({
-              userId: studentId,
-              classId: req.params.id,
-              status: "IN_PROGRESS",
-            })),
-            skipDuplicates: true,
-          });
-        }
-
-        // دریافت مجدد کلاس با اطلاعات به‌روز
-        const finalClass = await prisma.class.findUnique({
-          where: { id: req.params.id },
-          include: {
-            teacher: {
-              select: {
-                id: true,
-                name: true,
-                employeeCode: true,
-                email: true,
-                phone: true,
-              },
-            },
-            enrollments: {
-              include: {
-                user: {
-                  select: {
-                    id: true,
-                    name: true,
-                    employeeCode: true,
-                  },
-                },
-              },
-            },
-          },
-        });
-
-        return res.json({ success: true, data: finalClass });
-      }
-
-      res.json({ success: true, data: updatedClass });
-    } catch (err) {
-      console.error("❌ Error updating class:", err);
-      res.status(500).json({
-        success: false,
-        message: "Internal server error",
-        error: process.env.NODE_ENV === "development" ? err.message : undefined,
-      });
+      return res.json({ success: true, data: finalClass });
     }
-  },
-);
+
+    res.json({ success: true, data: updatedClass });
+  } catch (err) {
+    console.error("❌ Error updating class:", err);
+    res.status(500).json({
+      success: false,
+      message: "خطای داخلی سرور",
+      error: process.env.NODE_ENV === "development" ? err.message : undefined,
+    });
+  }
+});
 
 // =======================
 // ✅ READ: دریافت کلاس با ID
 // =======================
-router.get("/:id", authMiddleware, async (req, res) => {
+router.get("/:id", protect(), async (req, res) => { // ✅ اصلاح شد
   try {
     const classData = await prisma.class.findUnique({
       where: { id: req.params.id },
@@ -446,7 +429,7 @@ router.get("/:id", authMiddleware, async (req, res) => {
     if (!classData) {
       return res.status(404).json({
         success: false,
-        message: "Class not found",
+        message: "کلاس یافت نشد",
       });
     }
 
@@ -455,7 +438,7 @@ router.get("/:id", authMiddleware, async (req, res) => {
     console.error("❌ Error fetching class:", err);
     res.status(500).json({
       success: false,
-      message: "Internal server error",
+      message: "خطای داخلی سرور",
       error: process.env.NODE_ENV === "development" ? err.message : undefined,
     });
   }
@@ -464,53 +447,44 @@ router.get("/:id", authMiddleware, async (req, res) => {
 // =======================
 // ✅ DELETE: حذف کلاس
 // =======================
-router.delete(
-  "/:id",
-  authMiddleware,
-  roleMiddleware(["Admin"]),
-  async (req, res) => {
-    try {
-      // ابتدا بررسی وجود کلاس
-      const classExists = await prisma.class.findUnique({
-        where: { id: req.params.id },
-      });
+router.delete("/:id", protect(["Admin"]), async (req, res) => { // ✅ اصلاح شد
+  try {
+    const classExists = await prisma.class.findUnique({
+      where: { id: req.params.id },
+    });
 
-      if (!classExists) {
-        return res.status(404).json({
-          success: false,
-          message: "Class not found",
-        });
-      }
-
-      // حذف کلاس (cascade حذف enrollments و sessions را انجام می‌دهد)
-      await prisma.class.delete({
-        where: { id: req.params.id },
-      });
-
-      res.json({
-        success: true,
-        message: "Class deleted successfully",
-      });
-    } catch (err) {
-      console.error("❌ Error deleting class:", err);
-      res.status(500).json({
+    if (!classExists) {
+      return res.status(404).json({
         success: false,
-        message: "Internal server error",
-        error: process.env.NODE_ENV === "development" ? err.message : undefined,
+        message: "کلاس یافت نشد",
       });
     }
-  },
-);
-// backend/src/routes/class.routes.js
+
+    await prisma.class.delete({
+      where: { id: req.params.id },
+    });
+
+    res.json({
+      success: true,
+      message: "کلاس با موفقیت حذف شد",
+    });
+  } catch (err) {
+    console.error("❌ Error deleting class:", err);
+    res.status(500).json({
+      success: false,
+      message: "خطای داخلی سرور",
+      error: process.env.NODE_ENV === "development" ? err.message : undefined,
+    });
+  }
+});
 
 // =======================
 // ✅ GET CLASSES BY STUDENT
 // =======================
-router.get("/student/:studentId", authMiddleware, async (req, res) => {
+router.get("/student/:studentId", protect(), async (req, res) => { // ✅ اصلاح شد
   try {
     const { studentId } = req.params;
 
-    // پیدا کردن کلاس‌هایی که دانشجو در آنها ثبت‌نام شده است
     const enrollments = await prisma.enrollment.findMany({
       where: { userId: studentId },
       include: {
@@ -553,7 +527,7 @@ router.get("/student/:studentId", authMiddleware, async (req, res) => {
     console.error("❌ Error fetching student classes:", err);
     res.status(500).json({
       success: false,
-      message: "Internal server error",
+      message: "خطای داخلی سرور",
     });
   }
 });
@@ -561,7 +535,7 @@ router.get("/student/:studentId", authMiddleware, async (req, res) => {
 // =======================
 // ✅ GET CLASSES BY TEACHER
 // =======================
-router.get("/teacher/:teacherId", authMiddleware, async (req, res) => {
+router.get("/teacher/:teacherId", protect(), async (req, res) => { // ✅ اصلاح شد
   try {
     const { teacherId } = req.params;
 
@@ -601,189 +575,172 @@ router.get("/teacher/:teacherId", authMiddleware, async (req, res) => {
     console.error("❌ Error fetching teacher classes:", err);
     res.status(500).json({
       success: false,
-      message: "Internal server error",
+      message: "خطای داخلی سرور",
     });
   }
 });
+
 // =======================
 // ✅ ADD STUDENT: افزودن دانشجو به کلاس
 // =======================
-router.post(
-  "/:id/add-student",
-  authMiddleware,
-  roleMiddleware(["Admin"]),
-  async (req, res) => {
-    try {
-      const { studentId } = req.body;
+router.post("/:id/add-student", protect(["Admin"]), async (req, res) => { // ✅ اصلاح شد
+  try {
+    const { studentId } = req.body;
 
-      if (!studentId) {
-        return res.status(400).json({
-          success: false,
-          message: "Student ID is required",
-        });
-      }
-
-      // بررسی وجود کلاس
-      const classData = await prisma.class.findUnique({
-        where: { id: req.params.id },
-        include: {
-          enrollments: true,
-        },
+    if (!studentId) {
+      return res.status(400).json({
+        success: false,
+        message: "شناسه دانشجو الزامی است",
       });
+    }
 
-      if (!classData) {
-        return res.status(404).json({
-          success: false,
-          message: "Class not found",
-        });
-      }
+    const classData = await prisma.class.findUnique({
+      where: { id: req.params.id },
+      include: {
+        enrollments: true,
+      },
+    });
 
-      // بررسی ظرفیت کلاس
-      if (classData.enrollments.length >= classData.capacity) {
-        return res.status(400).json({
-          success: false,
-          message: "Class is full",
-        });
-      }
-
-      // بررسی وجود دانشجو
-      const student = await prisma.user.findFirst({
-        where: {
-          id: studentId,
-          role: "Student",
-          status: "ACTIVE",
-        },
+    if (!classData) {
+      return res.status(404).json({
+        success: false,
+        message: "کلاس یافت نشد",
       });
+    }
 
-      if (!student) {
-        return res.status(400).json({
-          success: false,
-          message: "Student not found or inactive",
-        });
-      }
-
-      // بررسی تکراری نبودن
-      const existing = await prisma.enrollment.findUnique({
-        where: {
-          userId_classId: {
-            userId: studentId,
-            classId: req.params.id,
-          },
-        },
+    if (classData.enrollments.length >= classData.capacity) {
+      return res.status(400).json({
+        success: false,
+        message: "ظرفیت کلاس تکمیل شده است",
       });
+    }
 
-      if (existing) {
-        return res.status(400).json({
-          success: false,
-          message: "Student already enrolled in this class",
-        });
-      }
+    const student = await prisma.user.findFirst({
+      where: {
+        id: studentId,
+        role: "Student",
+        status: "ACTIVE",
+      },
+    });
 
-      // افزودن دانشجو
-      await prisma.enrollment.create({
-        data: {
+    if (!student) {
+      return res.status(400).json({
+        success: false,
+        message: "دانشجو یافت نشد یا غیرفعال است",
+      });
+    }
+
+    const existing = await prisma.enrollment.findUnique({
+      where: {
+        userId_classId: {
           userId: studentId,
           classId: req.params.id,
-          status: "IN_PROGRESS",
         },
-      });
+      },
+    });
 
-      // دریافت اطلاعات به‌روز
-      const updatedClass = await prisma.class.findUnique({
-        where: { id: req.params.id },
-        include: {
-          teacher: {
-            select: {
-              name: true,
-              employeeCode: true,
-            },
+    if (existing) {
+      return res.status(400).json({
+        success: false,
+        message: "دانشجو قبلاً در این کلاس ثبت‌نام شده است",
+      });
+    }
+
+    await prisma.enrollment.create({
+      data: {
+        userId: studentId,
+        classId: req.params.id,
+        status: "IN_PROGRESS",
+      },
+    });
+
+    const updatedClass = await prisma.class.findUnique({
+      where: { id: req.params.id },
+      include: {
+        teacher: {
+          select: {
+            name: true,
+            employeeCode: true,
           },
-          enrollments: {
-            include: {
-              user: {
-                select: {
-                  name: true,
-                  employeeCode: true,
-                },
+        },
+        enrollments: {
+          include: {
+            user: {
+              select: {
+                name: true,
+                employeeCode: true,
               },
             },
           },
         },
-      });
+      },
+    });
 
-      res.json({
-        success: true,
-        data: updatedClass,
-        message: "Student added successfully",
-      });
-    } catch (err) {
-      console.error("❌ Error adding student to class:", err);
-      res.status(500).json({
-        success: false,
-        message: "Internal server error",
-        error: process.env.NODE_ENV === "development" ? err.message : undefined,
-      });
-    }
-  },
-);
+    res.json({
+      success: true,
+      data: updatedClass,
+      message: "دانشجو با موفقیت اضافه شد",
+    });
+  } catch (err) {
+    console.error("❌ Error adding student to class:", err);
+    res.status(500).json({
+      success: false,
+      message: "خطای داخلی سرور",
+      error: process.env.NODE_ENV === "development" ? err.message : undefined,
+    });
+  }
+});
 
 // =======================
 // ✅ REMOVE STUDENT: حذف دانشجو از کلاس
 // =======================
-router.delete(
-  "/:id/remove-student/:studentId",
-  authMiddleware,
-  roleMiddleware(["Admin"]),
-  async (req, res) => {
-    try {
-      const { id, studentId } = req.params;
+router.delete("/:id/remove-student/:studentId", protect(["Admin"]), async (req, res) => { // ✅ اصلاح شد
+  try {
+    const { id, studentId } = req.params;
 
-      // بررسی وجود کلاس
-      const classExists = await prisma.class.findUnique({
-        where: { id },
-      });
+    const classExists = await prisma.class.findUnique({
+      where: { id },
+    });
 
-      if (!classExists) {
-        return res.status(404).json({
-          success: false,
-          message: "Class not found",
-        });
-      }
-
-      // حذف enrollment
-      const result = await prisma.enrollment.deleteMany({
-        where: {
-          classId: id,
-          userId: studentId,
-        },
-      });
-
-      if (result.count === 0) {
-        return res.status(404).json({
-          success: false,
-          message: "Student not found in this class",
-        });
-      }
-
-      res.json({
-        success: true,
-        message: "Student removed successfully",
-      });
-    } catch (err) {
-      console.error("❌ Error removing student from class:", err);
-      res.status(500).json({
+    if (!classExists) {
+      return res.status(404).json({
         success: false,
-        message: "Internal server error",
-        error: process.env.NODE_ENV === "development" ? err.message : undefined,
+        message: "کلاس یافت نشد",
       });
     }
-  },
-);
+
+    const result = await prisma.enrollment.deleteMany({
+      where: {
+        classId: id,
+        userId: studentId,
+      },
+    });
+
+    if (result.count === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "دانشجو در این کلاس یافت نشد",
+      });
+    }
+
+    res.json({
+      success: true,
+      message: "دانشجو با موفقیت حذف شد",
+    });
+  } catch (err) {
+    console.error("❌ Error removing student from class:", err);
+    res.status(500).json({
+      success: false,
+      message: "خطای داخلی سرور",
+      error: process.env.NODE_ENV === "development" ? err.message : undefined,
+    });
+  }
+});
 
 // =======================
 // ✅ LIST: لیست کلاس‌ها با فیلتر و pagination
 // =======================
-router.get("/", authMiddleware, async (req, res) => {
+router.get("/", protect(), async (req, res) => { // ✅ اصلاح شد
   try {
     const {
       status,
@@ -801,7 +758,6 @@ router.get("/", authMiddleware, async (req, res) => {
     const skip = (parseInt(page) - 1) * parseInt(limit);
     const take = parseInt(limit);
 
-    // ساخت شرط‌های جستجو
     const where = {};
 
     if (status) where.status = status;
@@ -821,10 +777,8 @@ router.get("/", authMiddleware, async (req, res) => {
       ];
     }
 
-    // ایجاد orderBy با توجه به فیلدهای موجود در مدل
     const orderBy = {};
 
-    // بررسی اینکه فیلد مرتب‌سازی در مدل وجود دارد
     const validSortFields = [
       "id",
       "name",
@@ -845,11 +799,9 @@ router.get("/", authMiddleware, async (req, res) => {
       "description",
     ];
 
-    // اگر فیلد مرتب‌سازی معتبر نیست، از پیش‌فرض استفاده کن
     const sortField = validSortFields.includes(sortBy) ? sortBy : "startDate";
     orderBy[sortField] = sortOrder === "asc" ? "asc" : "desc";
 
-    // دریافت کلاس‌ها با pagination
     const [classes, total] = await Promise.all([
       prisma.class.findMany({
         where,
@@ -901,7 +853,7 @@ router.get("/", authMiddleware, async (req, res) => {
     console.error("❌ Error fetching classes:", err);
     res.status(500).json({
       success: false,
-      message: "Internal server error",
+      message: "خطای داخلی سرور",
       error: process.env.NODE_ENV === "development" ? err.message : undefined,
     });
   }
@@ -910,7 +862,7 @@ router.get("/", authMiddleware, async (req, res) => {
 // =======================
 // ✅ GET STUDENTS: دریافت دانشجویان یک کلاس
 // =======================
-router.get("/:id/students", authMiddleware, async (req, res) => {
+router.get("/:id/students", protect(), async (req, res) => { // ✅ اصلاح شد
   try {
     const { id } = req.params;
 
@@ -946,7 +898,7 @@ router.get("/:id/students", authMiddleware, async (req, res) => {
     if (!classData) {
       return res.status(404).json({
         success: false,
-        message: "Class not found",
+        message: "کلاس یافت نشد",
       });
     }
 
@@ -962,7 +914,7 @@ router.get("/:id/students", authMiddleware, async (req, res) => {
     console.error("❌ Error fetching class students:", err);
     res.status(500).json({
       success: false,
-      message: "Internal server error",
+      message: "خطای داخلی سرور",
       error: process.env.NODE_ENV === "development" ? err.message : undefined,
     });
   }

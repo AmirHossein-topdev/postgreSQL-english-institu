@@ -73,6 +73,8 @@ export default function UnifiedLoginForm() {
         password: data.password,
       }).unwrap();
 
+      console.log("✅ Login response:", response);
+
       const user = response.user;
       if (!user) {
         notifyError("اطلاعات کاربر دریافت نشد");
@@ -80,6 +82,9 @@ export default function UnifiedLoginForm() {
         setShowOverlay(false);
         return;
       }
+
+      // ✅ دریافت توکن از پاسخ
+      const token = response.token;
 
       const userRole = user.role;
       const normalizedRole = ROLE_MAP[userRole] || "student";
@@ -93,7 +98,22 @@ export default function UnifiedLoginForm() {
         employeeCode: user.employeeCode,
       };
 
+      // ✅ ذخیره در sessionStorage برای استفاده در صفحات
       sessionStorage.setItem("currentUser", JSON.stringify(safeUser));
+
+      // ✅ ذخیره توکن در localStorage برای baseApi
+      localStorage.setItem("userInfo", JSON.stringify({
+        accessToken: token,
+        user: safeUser,
+      }));
+
+      // ✅ همچنین در sessionStorage برای دسترسی آسان‌تر
+      sessionStorage.setItem("userInfo", JSON.stringify({
+        accessToken: token,
+        user: safeUser,
+      }));
+
+      console.log("✅ Token saved to localStorage and sessionStorage");
 
       const redirectPath = getRedirectPath(normalizedRole);
 
