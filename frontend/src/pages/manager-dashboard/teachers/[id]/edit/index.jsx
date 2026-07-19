@@ -3,10 +3,6 @@
 
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/router";
-import {
-  useGetUserByIdQuery,
-  useUpdateUserMutation,
-} from "../../../../../redux/features/userApi";
 import DashboardLayout from "../../../layout";
 import Link from "next/link";
 import { FaArrowLeft, FaSave, FaBirthdayCake } from "react-icons/fa";
@@ -28,6 +24,7 @@ import {
   Award,
   Briefcase,
   DollarSign,
+  Trash2,
 } from "lucide-react";
 
 const SPECIALIZATION_OPTIONS = [
@@ -49,7 +46,7 @@ export default function EditTeacherPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isError, setIsError] = useState(false);
-  const [teacherData, setTeacherData] = useState(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [formData, setFormData] = useState({
     name: "",
@@ -63,11 +60,12 @@ export default function EditTeacherPage() {
     salary: "",
     birthday: "",
     status: "ACTIVE",
-    profileImage: null,
+    profileImage: null, // فایل جدید
   });
 
   const [previewOld, setPreviewOld] = useState("");
   const [previewNew, setPreviewNew] = useState("");
+  const [oldImageName, setOldImageName] = useState("");
 
   // Load data from API
   useEffect(() => {
@@ -82,12 +80,9 @@ export default function EditTeacherPage() {
         const result = await res.json();
         const user = result?.data || result?.user || result;
 
-        console.log("TEACHER RAW DATA:", user);
+        console.log("📚 TEACHER RAW DATA:", user);
 
         if (user) {
-          setTeacherData(user);
-
-          // استخراج اطلاعات از teacherProfile
           const teacherProfile = user.teacherProfile || {};
 
           setFormData({
@@ -107,11 +102,14 @@ export default function EditTeacherPage() {
             profileImage: null,
           });
 
-          setPreviewOld(
-            user.profileImage && user.profileImage !== "default-avatar.png"
-              ? `http://localhost:5000/uploads/${user.profileImage}`
-              : "",
-          );
+          // تنظیم preview عکس فعلی
+          if (user.profileImage && user.profileImage !== "default-avatar.png") {
+            setPreviewOld(`http://localhost:5000/uploads/${user.profileImage}`);
+            setOldImageName(user.profileImage);
+          } else {
+            setPreviewOld("");
+            setOldImageName("");
+          }
         } else {
           setIsError(true);
         }
@@ -143,78 +141,148 @@ export default function EditTeacherPage() {
   const handleFileChange = (e) => {
     const file = e.target.files[0];
     if (!file) return;
+
+    // بررسی حجم فایل (حداکثر ۲ مگابایت)
+    if (file.size > 2 * 1024 * 1024) {
+      Swal.fire({
+        icon: "warning",
+        title: "حجم فایل زیاد است!",
+        text: "حداکثر حجم مجاز ۲ مگابایت است.",
+        background: "#1a1f2e",
+        color: "#fff",
+        confirmButtonColor: "#3b82f6",
+      });
+      e.target.value = "";
+      return;
+    }
+
+    // بررسی نوع فایل
+    const allowedTypes = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+    if (!allowedTypes.includes(file.type)) {
+      Swal.fire({
+        icon: "warning",
+        title: "فرمت فایل نامعتبر!",
+        text: "فقط فرمت‌های JPG, PNG, WEBP, GIF مجاز هستند.",
+        background: "#1a1f2e",
+        color: "#fff",
+        confirmButtonColor: "#3b82f6",
+      });
+      e.target.value = "";
+      return;
+    }
+
     setFormData((prev) => ({ ...prev, profileImage: file }));
     setPreviewNew(URL.createObjectURL(file));
   };
 
+  const handleRemoveNewImage = () => {
+    setFormData((prev) => ({ ...prev, profileImage: null }));
+    setPreviewNew("");
+    // ریست کردن input file
+    const fileInput = document.querySelector('input[type="file"]');
+    if (fileInput) fileInput.value = "";
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setIsSubmitting(true);
 
     try {
-      // ساختار داده‌ها برای ارسال به سرور - مطابق با مدل Prisma
-      const updateData = {
-        name: formData.name,
-        employeeCode: formData.employeeCode,
-        email: formData.email || null,
-        phone: formData.phone || null,
-        address: formData.address || null,
-        birthday: formData.birthday || null,
-        status: formData.status,
-        // اطلاعات teacherProfile - اینها باید در body اصلی ارسال شوند
-        specialization: formData.specialization || null,
-        hireDate: formData.hireDate
-          ? new Date(formData.hireDate).toISOString()
-          : null,
-        salary: formData.salary ? parseFloat(formData.salary) : null,
-      };
+      // ✅ استفاده از FormData برای ارسال فایل
+      const formDataToSend = new FormData();
 
-      // اگر رمز عبور جدید وارد شده بود، اضافه کن
-      if (formData.password) {
-        updateData.password = formData.password;
+      // اضافه کردن فیلدهای متنی
+      formDataToSend.append("name", formData.name);
+      formDataToSend.append("employeeCode", formData.employeeCode);
+      formDataToSend.append("email", formData.email || "");
+      formDataToSend.append("phone", formData.phone || "");
+      formDataToSend.append("address", formData.address || "");
+      formDataToSend.append("birthday", formData.birthday || "");
+      formDataToSend.append("status", formData.status);
+      formDataToSend.append("specialization", formData.specialization || "");
+      
+      if (formData.hireDate) {
+        formDataToSend.append("hireDate", new Date(formData.hireDate).toISOString());
+      }
+      
+      if (formData.salary) {
+        formDataToSend.append("salary", formData.salary);
       }
 
-      console.log("📤 Sending update data:", updateData);
+      // ✅ اضافه کردن رمز عبور جدید (اگه وارد شده)
+      if (formData.password) {
+        formDataToSend.append("password", formData.password);
+      }
 
-      // ارسال به صورت JSON - ساده‌ترین و مطمئن‌ترین روش
+      // ✅ اضافه کردن فایل عکس (اگه انتخاب شده)
+      if (formData.profileImage) {
+        formDataToSend.append("profileImage", formData.profileImage);
+        console.log("📸 New image attached:", formData.profileImage.name);
+      }
+
+      // ✅ برای دیباگ - نمایش محتوای FormData
+      console.log("📤 Sending FormData:");
+      for (let [key, value] of formDataToSend.entries()) {
+        if (value instanceof File) {
+          console.log(`  ${key}: [File] ${value.name} (${value.size} bytes)`);
+        } else {
+          console.log(`  ${key}: ${value}`);
+        }
+      }
+
+      // ✅ ارسال با FormData - بدون Content-Type (مرورگر خودش تنظیم میکنه)
       const response = await fetch(`http://localhost:5000/api/users/${id}`, {
         method: "PUT",
         headers: {
-          "Content-Type": "application/json",
+          // ❌ DON'T set Content-Type here - browser will set it with boundary
+          // ✅ فقط توکن رو ارسال کن
+          Authorization: `Bearer ${JSON.parse(localStorage.getItem("userInfo"))?.accessToken || ""}`,
         },
-        body: JSON.stringify(updateData),
+        body: formDataToSend,
       });
 
       const result = await response.json();
       console.log("📥 Server response:", result);
 
       if (response.ok && result.success) {
-        Swal.fire({
+        // نمایش پیام موفقیت
+        await Swal.fire({
           icon: "success",
-          title: "موفقیت!",
+          title: "موفقیت! 🎉",
           text: "اطلاعات استاد با موفقیت به‌روزرسانی شد.",
           background: "#1a1f2e",
           color: "#fff",
           confirmButtonColor: "#3b82f6",
           confirmButtonText: "باشه",
-        }).then(() => {
-          window.location.href = "/manager-dashboard/teachers";
         });
+
+        // ریدایرکت به لیست اساتید
+        window.location.href = "/manager-dashboard/teachers";
       } else {
         throw new Error(result.message || "خطا در به‌روزرسانی");
       }
     } catch (err) {
-      console.error("Update teacher error:", err);
+      console.error("❌ Update teacher error:", err);
 
       let errorMessage = err.message || "مشکلی در ویرایش استاد رخ داد";
 
+      // نمایش خطاهای خاص
+      if (err.message?.includes("duplicate")) {
+        errorMessage = "این کد عضویت یا ایمیل قبلاً ثبت شده است!";
+      } else if (err.message?.includes("validation")) {
+        errorMessage = "لطفاً همه فیلدهای ضروری را به درستی پر کنید.";
+      }
+
       Swal.fire({
         icon: "error",
-        title: "خطا!",
+        title: "خطا! ❌",
         text: errorMessage,
         background: "#1a1f2e",
         color: "#fff",
         confirmButtonColor: "#ef4444",
       });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -286,10 +354,10 @@ export default function EditTeacherPage() {
                 />
               </div>
 
-              {/* کد عضویت / کد ملی */}
+              {/* کد عضویت */}
               <div className="space-y-2">
                 <label className="flex items-center gap-2 text-gray-400 font-bold text-sm mr-2">
-                  <Hash size={16} className="text-blue-400" /> کد عضویت / کد ملی
+                  <Hash size={16} className="text-blue-400" /> کد عضویت
                   <span className="text-red-400">*</span>
                 </label>
                 <input
@@ -316,12 +384,6 @@ export default function EditTeacherPage() {
                     name="password"
                     value={formData.password}
                     onChange={handleChange}
-                    onKeyDown={(e) => {
-                      const isPersian = /[\u0600-\u06FF]/.test(e.key);
-                      if (isPersian) {
-                        e.preventDefault();
-                      }
-                    }}
                     className="w-full bg-[#0F1420] border border-blue-500/20 text-white rounded-2xl p-4 pl-12 focus:ring-2 focus:ring-blue-400/20 focus:border-blue-400 outline-none transition-all"
                     placeholder="در صورت تمایل رمز جدید وارد کنید"
                   />
@@ -335,10 +397,10 @@ export default function EditTeacherPage() {
                 </div>
               </div>
 
-              {/* تخصص استاد */}
+              {/* تخصص */}
               <div className="space-y-2">
                 <label className="flex items-center gap-2 text-gray-400 font-bold text-sm mr-2">
-                  <Award size={16} className="text-blue-400" /> تخصص استاد
+                  <Award size={16} className="text-blue-400" /> تخصص
                 </label>
                 <select
                   name="specialization"
@@ -386,12 +448,6 @@ export default function EditTeacherPage() {
                   name="email"
                   value={formData.email}
                   onChange={handleChange}
-                  onKeyDown={(e) => {
-                    const isPersian = /[\u0600-\u06FF]/.test(e.key);
-                    if (isPersian) {
-                      e.preventDefault();
-                    }
-                  }}
                   className="w-full bg-[#0F1420] border border-blue-500/20 text-white rounded-2xl p-4 focus:ring-2 focus:ring-blue-400/20 focus:border-blue-400 outline-none transition-all"
                   placeholder="example@email.com"
                 />
@@ -412,7 +468,7 @@ export default function EditTeacherPage() {
                 />
               </div>
 
-              {/* حقوق پایه */}
+              {/* حقوق */}
               <div className="space-y-2">
                 <label className="flex items-center gap-2 text-gray-400 font-bold text-sm mr-2">
                   <DollarSign size={16} className="text-blue-400" /> حقوق پایه
@@ -481,56 +537,94 @@ export default function EditTeacherPage() {
                 />
               </div>
 
-              {/* تصویر پروفایل */}
+              {/* تصویر پروفایل - بخش اصلاح‌شده */}
               <div className="md:col-span-2 space-y-4">
                 <label className="flex items-center gap-2 text-gray-400 font-bold text-sm mr-2">
                   <MdDriveFolderUpload size={16} className="text-blue-400" />{" "}
                   تصویر پروفایل
                 </label>
 
-                {/* عکس فعلی */}
-                {previewOld && (
-                  <div className="mb-4">
-                    <p className="text-gray-500 text-xs mb-2">عکس فعلی:</p>
-                    <img
-                      src={previewOld}
-                      className="w-24 h-24 rounded-xl object-cover border border-blue-500/20"
-                      alt="Current"
-                    />
-                  </div>
-                )}
+                <div className="p-6 bg-[#0F1420] border-2 border-dashed border-blue-500/30 rounded-3xl">
+                  {/* نمایش عکس فعلی و جدید */}
+                  <div className="flex flex-wrap items-center gap-6 mb-4">
+                    {/* عکس فعلی */}
+                    {previewOld && (
+                      <div className="relative">
+                        <p className="text-gray-500 text-xs mb-1 text-center">
+                          عکس فعلی
+                        </p>
+                        <img
+                          src={previewOld}
+                          className="w-24 h-24 rounded-xl object-cover border-2 border-blue-500/30"
+                          alt="Current"
+                        />
+                      </div>
+                    )}
 
-                {/* پیش‌نمایش عکس جدید */}
-                {previewNew && (
-                  <div className="mb-4">
-                    <p className="text-gray-500 text-xs mb-2">
-                      پیش‌نمایش عکس جدید:
-                    </p>
-                    <img
-                      src={previewNew}
-                      className="w-24 h-24 rounded-xl object-cover border border-blue-500/20"
-                      alt="Preview"
-                    />
-                  </div>
-                )}
+                    {/* فلش اگه هر دو عکس وجود دارن */}
+                    {previewOld && previewNew && (
+                      <div className="text-blue-400 text-2xl font-bold">→</div>
+                    )}
 
-                <div className="flex flex-wrap items-center gap-6 p-4 bg-[#0F1420] border-2 border-dashed border-blue-500/30 rounded-3xl">
-                  <label className="flex items-center justify-center gap-2 bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-xl cursor-pointer transition-all font-black text-xs uppercase shadow-lg shadow-blue-500/25">
-                    <MdDriveFolderUpload size={16} /> انتخاب فایل
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={handleFileChange}
-                      className="hidden"
-                    />
-                  </label>
-                  <span className="text-gray-500 text-xs italic">
-                    (فرمت‌های مجاز: JPG, PNG - حداکثر ۲ مگابایت)
-                  </span>
+                    {/* پیش‌نمایش عکس جدید */}
+                    {previewNew && (
+                      <div className="relative">
+                        <p className="text-gray-500 text-xs mb-1 text-center">
+                          عکس جدید
+                        </p>
+                        <img
+                          src={previewNew}
+                          className="w-24 h-24 rounded-xl object-cover border-2 border-green-500/30"
+                          alt="Preview"
+                        />
+                        <button
+                          type="button"
+                          onClick={handleRemoveNewImage}
+                          className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600 transition-all shadow-lg"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    )}
+
+                    {/* placeholder اگه هیچ عکسی نیست */}
+                    {!previewOld && !previewNew && (
+                      <div className="flex items-center justify-center w-24 h-24 bg-gray-800/30 rounded-xl border-2 border-dashed border-gray-600">
+                        <User size={32} className="text-gray-500" />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* دکمه انتخاب فایل */}
+                  <div className="flex flex-wrap items-center gap-6">
+                    <label className="flex items-center justify-center gap-2 bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-xl cursor-pointer transition-all font-black text-xs uppercase shadow-lg shadow-blue-500/25">
+                      <MdDriveFolderUpload size={16} /> انتخاب فایل جدید
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp,image/gif"
+                        onChange={handleFileChange}
+                        className="hidden"
+                      />
+                    </label>
+
+                    <span className="text-gray-500 text-xs italic">
+                      (فرمت‌های مجاز: JPG, PNG, WEBP - حداکثر ۲ مگابایت)
+                    </span>
+
+                    {previewNew && (
+                      <button
+                        type="button"
+                        onClick={handleRemoveNewImage}
+                        className="text-red-400 hover:text-red-300 text-sm font-bold underline transition-all"
+                      >
+                        حذف عکس جدید
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
 
-              {/* وضعیت حساب */}
+              {/* وضعیت */}
               <div className="md:col-span-2 space-y-2">
                 <label className="flex items-center gap-2 text-gray-400 font-bold text-sm mr-2">
                   <CheckCircle2 size={16} className="text-blue-400" /> وضعیت
@@ -571,15 +665,25 @@ export default function EditTeacherPage() {
             </div>
           </div>
 
-          {/* دکمه ارسال نهایی */}
+          {/* دکمه ارسال */}
           <div className="flex justify-center pb-10">
             <button
               type="submit"
+              disabled={isSubmitting}
               className="group relative w-full max-w-md bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white px-10 py-5 rounded-2xl font-black text-lg italic transition-all shadow-[0_20px_40px_rgba(59,130,246,0.25)] active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed overflow-hidden"
             >
               <span className="relative z-10 flex items-center justify-center gap-3">
-                ذخیره تغییرات
-                <FaSave size={22} />
+                {isSubmitting ? (
+                  <>
+                    <span className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent"></span>
+                    در حال ذخیره...
+                  </>
+                ) : (
+                  <>
+                    ذخیره تغییرات
+                    <FaSave size={22} />
+                  </>
+                )}
               </span>
               <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>
             </button>
